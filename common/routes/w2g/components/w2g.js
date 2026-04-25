@@ -8,6 +8,8 @@ import { writable } from 'simple-store-svelte'
 import Debug from 'debug'
 const debug = Debug('ui:w2g')
 
+const version = 1
+
 /**
  * @typedef {Record<string, {user: import('@/modules/providers/anilist/al.d.ts').Viewer | {id: string }, peer?: import('p2pt').Peer<any>}>} PeerList
  */
@@ -44,6 +46,7 @@ export class W2GClient extends EventTarget {
   /** @type {{maget: 'string', hash: 'string'} | null} */
   magnet = null
   isHost = false
+  hostId = null
   #p2pt
   code
   /** @type {import('simple-store-svelte').Writable<{message: string, user: import('@/modules/providers/anilist/al.d.ts').Viewer | {id: string }, type: 'incoming' | 'outgoing', date: Date}[]>} */
@@ -73,8 +76,8 @@ export class W2GClient extends EventTarget {
    */
   localPlayerStateChanged ({ payload }) {
     debug(`localPlayerStateChanged: ${JSON.stringify(payload)}`)
-    this.player.payload.paused = payload.paused
-    this.player.payload.time = payload.time
+    this.player.paused = payload.paused
+    this.player.time = payload.time
 
     this.playerStateChanged(this.player)
   }
@@ -85,6 +88,8 @@ export class W2GClient extends EventTarget {
   constructor (code) {
     super()
     this.isHost = !code
+
+    this.hostId = !code ? this.self.id : null
 
     this.code = code ?? generateRandomHexCode(16)
 
@@ -98,11 +103,10 @@ export class W2GClient extends EventTarget {
 
   magnetLink (magnet) {
     debug(`magnetLink: ${this.magnet?.hash} ${magnet.hash}`)
-    if (this.magnet?.hash !== magnet.hash) {
-      this.magnet = magnet
-      this.isHost = true
-      this.#sendToPeers(new Event('magnet', magnet))
-    }
+    this.magnet = magnet
+    this.isHost = true
+    this.hostId = this.self.id
+    this.#sendToPeers(new Event('magnet', magnet))
   }
 
   /** @param {number} index */
@@ -166,9 +170,7 @@ export class W2GClient extends EventTarget {
 
   async #onPeerconnect (peer) {
     debug(`#onPeerconnect: ${peer.id}`)
-    this.#sendEvent(peer, new Event('init', this.self))
-
-    if (this.isHost) this.#sendInitialSessionState(peer)
+    this.#sendEvent(peer, new Event('init', { ...this.self, isHost: this.isHost, version: version }))
   }
 
   /**
@@ -180,17 +182,41 @@ export class W2GClient extends EventTarget {
     data = typeof data === 'string' ? JSON.parse(data) : data
 
     switch (data.type) {
-      case EventTypes.SessionInitEvent:
-        this.peers.update(peers => {
-          peers[peer.id] = {
-            peer,
-            user: data.payload
+      case EventTypes.SessionInitEvent: {
+        const { version, isHost, ...user } = data.payload
+        if (version !== version) {
+          if (this.isHost) {
+            this.#p2pt.send(peer, JSON.stringify(new Event('reject', {
+              reason: version > version ? 'outdated_host' : 'outdated_peer',
+              peerVersion: version,
+              hostVersion: version
+            }))).then(() => peer.destroy())
           }
+          break
+        }
+        this.peers.update(peers => {
+          peers[peer.id] = { peer, user }
           return peers
         })
+        if (isHost) this.hostId = peer.id
+        if (this.isHost) this.#sendInitialSessionState(peer)
         break
+      }
+      case EventTypes.SessionRejectEvent: {
+        this.dispatchEvent(new CustomEvent('reject', {
+          detail: {
+            peerId: peer.id,
+            peerVersion: data.payload.peerVersion,
+            hostVersion: data.payload.hostVersion,
+            isNewer: data.payload.reason === 'outdated_host'
+          }
+        }))
+        this.destroy()
+        break
+      }
       case EventTypes.MagnetLinkEvent: {
         if (data.payload?.magnet == null) break
+        if (this.hostId && peer.id !== this.hostId) break // Ignore if not from host. TODO: Make this optional.
         const { hash, magnet } = data.payload
         if (hash !== this.magnet?.hash) {
           this.isHost = false
@@ -201,10 +227,10 @@ export class W2GClient extends EventTarget {
         break
       }
       case EventTypes.MediaIndexEvent: {
-        if (data.payload?.index == null) break
-        if (this.index !== data.payload.index) {
-          this.index = data.payload.index
-          this.dispatchEvent(new CustomEvent('index', { detail: data.payload.index }))
+        if (data.payload == null) break
+        if (this.index !== data.payload) {
+          this.index = data.payload
+          this.dispatchEvent(new CustomEvent('index', { detail: data.payload }))
         }
         break
       }
@@ -243,6 +269,8 @@ export class W2GClient extends EventTarget {
     this.#p2pt.destroy()
     this.removeAllListeners()
     this.#p2pt = null
+    this.magnet = null
+    this.hostId = null
     this.isHost = false
     this.peers.value = {}
   }

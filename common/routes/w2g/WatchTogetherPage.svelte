@@ -5,6 +5,8 @@
   import { SUPPORTS } from '@/modules/support.js'
   import { page } from '@/modules/navigation.js'
   import { COMMON } from '@/modules/bridge.js'
+  import { loadedTorrent } from '@/modules/torrent.js'
+  import { toast } from 'svelte-sonner'
   import WPC from '@/modules/wpc.js'
   import Debug from 'debug'
   const debug = Debug('ui:w2g')
@@ -19,12 +21,35 @@
     if (state.value) state.value.destroy()
     const w2g = new W2GClient(code)
     state.value = w2g
+
+    // Temporary reject handle, better to have a modal show than a toast.
+    // TODO: Make this a soft modal.
+    w2g.addEventListener('reject', ({ detail }) => {
+      state.value = null
+      const msg = detail.isNewer ? 'Lobby is outdated' : 'Your app is outdated'
+      debug(`reject: ${msg} peerVersion=${detail.peerVersion} hostVersion=${detail.hostVersion}`)
+      toast.error(msg, {
+        description: detail.isNewer
+          ? `This watch together session requires an older app version. Ask the host to update their app!`
+          : `You are running an older app version than the joined watch together session. Please update your app!`,
+        duration: 30_000
+      })
+    })
+
+    // If we are the host and a torrent is already loaded, set it immediately
+    if (!code && loadedTorrent.value?.magnetURI) w2g.magnetLink({ magnet: loadedTorrent.value.magnetURI, hash: loadedTorrent.value.infoHash })
+
     w2g.addEventListener('index', ({ detail }) => w2gEmitter.dispatchEvent(new CustomEvent('setindex', { detail })))
     w2g.addEventListener('player', ({ detail }) => w2gEmitter.dispatchEvent(new CustomEvent('playerupdate', { detail: { time: detail.time, paused: detail.paused } })))
 
     if (!code) invite()
   }
-  WPC.listen('magnet', (detail) => state.value?.magnetLink(detail))
+
+  // Only allow host to change magnet.
+  // TODO: Make this an optional setting.
+  WPC.listen('magnet', (detail) => {
+    if (state.value?.isHost) state.value.magnetLink(detail)
+  })
 
   w2gEmitter.addEventListener('player', ({ detail }) => state.value?.playerStateChanged(detail))
   w2gEmitter.addEventListener('index', ({ detail }) => state.value?.mediaIndexChanged(detail))

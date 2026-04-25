@@ -33,11 +33,11 @@
 
   const emit = createEventDispatcher()
 
-  w2gEmitter.addEventListener('playerupdate', detail => {
+  w2gEmitter.addEventListener('playerupdate', ({ detail }) => {
     currentTime = detail.time
     paused = detail.paused
   })
-  w2gEmitter.addEventListener('setindex', detail => {
+  w2gEmitter.addEventListener('setindex', ({ detail }) => {
     playFile(detail)
   })
 
@@ -510,7 +510,7 @@
       if (index + 1 < videos.length) {
         const target = (index + 1) % videos.length
         handleCurrent(videos[target])
-        w2gEmitter.dispatchEvent(new CustomEvent('index', { detail: { index: target } }))
+        w2gEmitter.dispatchEvent(new CustomEvent('index', { detail: target }))
       } else if (media?.media?.nextAiringEpisode?.episode - 1 || ((media?.media?.episodes || getMediaMaxEp(media?.media)) > media?.episode)) {
         playAnime(media.media, media.episode + 1)
       }
@@ -521,7 +521,7 @@
       const index = videos.indexOf(current)
       if (index > 0) {
         handleCurrent(videos[index - 1])
-        w2gEmitter.dispatchEvent(new CustomEvent('index', { detail: { index: index - 1 } }))
+        w2gEmitter.dispatchEvent(new CustomEvent('index', { detail: index - 1 }))
       } else if (media?.episode > 1 || (media?.zeroEpisode && media?.episode === 1)) {
         playAnime(media.media, media.episode - 1)
       }
