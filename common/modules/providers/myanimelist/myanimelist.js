@@ -9,6 +9,7 @@ import { MutationQueue } from '@/modules/providers/lib/mutationqueue.js'
 import Helper from '@/modules/providers/helper.js'
 import Debug from 'debug'
 const debug = Debug('ui:myanimelist')
+const trace = Debug('net:myanimelist')
 
 export const clientID = atob('YmI3ZGNlMzg4MWQ4MDNlNjU2YzQ1YWEzOWJkYTljY2M=') // app type MUST be set to other, do not generate a seed.
 
@@ -118,6 +119,7 @@ class MALClient {
   }
 
   failedRefresh = []
+  numberOfQueries = 0
 
   /**
    * @param {Record<string, any>} query
@@ -126,6 +128,8 @@ class MALClient {
    */
   handleRequest = this.limiter.wrap(async (query, options) => {
     await this.rateLimitPromise
+    trace(`[${this.numberOfQueries}] requesting`, `query: ${JSON.stringify({ ...query, token: query.token ? '[redacted]' : undefined })}`, `options: ${JSON.stringify({ ...options, headers: { ...options.headers, Authorization: options.headers?.Authorization ? '[redacted]' : undefined } })}`)
+    this.numberOfQueries++
     let res = {}
     if (!query.eToken && (this.failedRefresh.includes(query.token ? query.token : this.userID.token) || (!query.token && this.userID.reauth))) return {}
     try {

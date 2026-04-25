@@ -13,7 +13,7 @@ import { malClient } from '@/modules/providers/myanimelist/myanimelist.js'
 import Helper from '@/modules/providers/helper.js'
 import Debug from 'debug'
 const debug = Debug('ui:anilist')
-const query = Debug('ui:alquery')
+const trace = Debug('net:anilist')
 
 const date = new Date()
 export const seasons = ['WINTER', 'SPRING', 'SUMMER', 'FALL']
@@ -227,7 +227,7 @@ class AnilistClient {
   /** @type {(options: RequestInit) => Promise<any>} */
   handleRequest = this.limiter.wrap(async opts => {
     await this.rateLimitPromise
-    query(`[${this.numberOfQueries}] requesting`, JSON.stringify(opts))
+    trace(`[${this.numberOfQueries}] requesting`, JSON.stringify({ ...opts, headers: { ...opts.headers, Authorization: opts.headers.Authorization ? '[redacted]' : undefined } }))
     this.numberOfQueries++
     if (status.value.match(/offline/i)) throw new Error('AniList API is temporarily disabled or network is offline')
     let res = {}

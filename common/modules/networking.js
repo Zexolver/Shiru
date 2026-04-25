@@ -3,12 +3,12 @@ import { writable } from 'simple-store-svelte'
 import { settings } from '@/modules/settings.js'
 import { codes, throttle, getRandomInt } from '@/modules/util.js'
 import Debug from 'debug'
-const debug = Debug('ui:networking')
+const trace = Debug('net:networking')
 
 export const status = writable(navigator.onLine ? 'online' : 'offline')
 export async function printError(title, description, error) {
   if (await isOffline(error) || await isAnilistDown(error)) return
-  debug(`Error: ${error.status || 429} - ${error.message || codes[error.status || 429]}`)
+  trace(`Error: ${error.status || 429} - ${error.message || codes[error.status || 429]}`)
   if (settings.value.toasts.includes('All') || settings.value.toasts.includes('Errors')) {
     toast.error(title, {
       description: `${description}\n${error.status || 429} - ${error.message || codes[error.status || 429]}`,
@@ -131,15 +131,15 @@ function newOutageChecker({ key, ping, detect, offlineEvent, onlineEvent, retryR
       resolvePromise?.(true)
       return
     }
-    debug(`Detected error during fetch(), checking for ${key} outage...`)
+    trace(`Detected error during fetch(), checking for ${key} outage...`)
     if (!detect(error)) {
       resolvePromise?.(false)
       return
     }
-    debug(`Verified suspicious error, navigator.onLine=${navigator.onLine}, verifying with ${key} ping...`)
+    trace(`Verified suspicious error, navigator.onLine=${navigator.onLine}, verifying with ${key} ping...`)
     const result = await ping()
     if (!result) {
-      debug(`${key} confirmed offline, starting up periodic checks...`)
+      trace(`${key} confirmed offline, starting up periodic checks...`)
       status.value = offlineEvent
       window.dispatchEvent(new CustomEvent(offlineEvent))
       if (outageToast) {
@@ -157,11 +157,11 @@ function newOutageChecker({ key, ping, detect, offlineEvent, onlineEvent, retryR
             if (result && status.value === offlineEvent) {
               status.value = 'online'
               window.dispatchEvent(new CustomEvent(onlineEvent))
-              debug(`Detected that the ${key} connection restored!`)
+              trace(`Detected that the ${key} connection restored!`)
               stop = true
               monitor = null
             } else if (!result) {
-              debug(`${key} still offline...`)
+              trace(`${key} still offline...`)
             }
             if (!stop) {
               const [min, max] = retryRange
@@ -178,7 +178,7 @@ function newOutageChecker({ key, ping, detect, offlineEvent, onlineEvent, retryR
         status.value = 'online'
         window.dispatchEvent(new CustomEvent(onlineEvent))
       }
-      debug(`${key} ping succeeded, online.`)
+      trace(`${key} ping succeeded, online.`)
       resolvePromise?.(false)
     }
   }, 5_000)
