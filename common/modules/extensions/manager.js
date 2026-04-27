@@ -127,7 +127,7 @@ class ExtensionManager {
 
     window.addEventListener('online', async () => {
       const tasks = Object.entries(extensionManager.inactiveWorkers).map(async ([key, worker]) => {
-        if (extensionManager.activeWorkers[key]) return
+        if (extensionManager.activeWorkers[key] || !settings.value.extensionsNew[key]?.enabled) return
         try {
           if (!(await worker.validate())) throw new Error('The content source appears to be unreachable.')
           extensionManager.activeWorkers[key] = worker
@@ -166,6 +166,7 @@ class ExtensionManager {
    * @returns {Promise<void>}
    */
   async validateExtension(key) {
+    if (!settings.value.extensionsNew[key]?.enabled) return
     const inactiveWorker = this.inactiveWorkers[key]
     if (!inactiveWorker) return
     try {
@@ -234,6 +235,33 @@ class ExtensionManager {
   }
 
   /**
+   * Disables an extension by terminating its worker.
+   * @param {string} key The extension key.
+   */
+  disableExtension(key) {
+    if (this.activeWorkers[key]) {
+      this.activeWorkers[key].terminate()
+      delete this.activeWorkers[key]
+    }
+    if (this.inactiveWorkers[key]) {
+      this.inactiveWorkers[key].terminate()
+      delete this.inactiveWorkers[key]
+    }
+  }
+
+  /**
+   * Enables an extension by loading and validating it.
+   * @param {string} key The extension key.
+   * @returns {Promise<void>}
+   */
+  async enableExtension(key) {
+    if (this.activeWorkers[key] || this.loadingExtensions.has(key)) return
+    const extension = settings.value.sourcesNew[key]
+    if (!extension) return
+    await this.loadExtensions({ [key]: extension }, false)
+  }
+
+  /**
    * Removes a specific extension source and clears related cache entries.
    * @param {string} extensionId The extension identifier.
    */
@@ -293,14 +321,14 @@ class ExtensionManager {
           }
         }
         settings.update(value => {
-          const sourcesNew = {...value.sourcesNew}
-          const extensionsNew = {...value.extensionsNew}
+          const sourcesNew = { ...value.sourcesNew }
+          const extensionsNew = { ...value.extensionsNew }
           config.forEach(extension => {
             const key = (extension.locale || (extension.update + '/')) + extension.id
-            sourcesNew[key] = {...extension, trusted: !!extension.id.match(new RegExp(atob('bnlhYQ=='), 'i')) || !!extension.id.match(new RegExp(atob('c3VrZWJlaQ=='), 'i'))}
-            if (!extensionsNew[key]) extensionsNew[key] = {enabled: true}
+            sourcesNew[key] = { ...extension, trusted: !!extension.id.match(new RegExp(atob('bnlhYQ=='), 'i')) || !!extension.id.match(new RegExp(atob('c3VrZWJlaQ=='), 'i')) }
+            if (!extensionsNew[key]) extensionsNew[key] = { enabled: true }
           })
-          return {...value, sourcesNew, extensionsNew}
+          return { ...value, sourcesNew, extensionsNew }
         })
       }
       this.pending.delete(url)
@@ -349,6 +377,7 @@ class ExtensionManager {
 
     const loadWorkers = Promise.allSettled(extensionIds.map(async (key) => {
       const loadingPromise = (async () => {
+        if (!settings.value.extensionsNew[key]?.enabled) return
         if (!modules[key]) {
           const extension = extensions[key]
           let newCode = await getExtension(extension?.name || extension?.id, (extension?.locale || (extension?.update + '/')) + extension?.main)

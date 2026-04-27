@@ -164,18 +164,19 @@
             </div>
           </div>
         </div>
-        {:else}
-        {#each Object.values(settings.sourcesNew).sort((a, b) => (settings.extensionsNew[(b?.locale || (b?.update + '/')) + b?.id]?.enabled ? 1 : 0) - (settings.extensionsNew[(a?.locale || (a?.update + '/')) + a?.id]?.enabled ? 1 : 0)) as extension}
+      {:else}
+        {#each Object.values(settings.sourcesNew).sort((a, b) => (settings.extensionsNew[(b?.locale || (b?.update + '/')) + b?.id]?.enabled ? 1 : 0) - (settings.extensionsNew[(a?.locale || (a?.update + '/')) + a?.id]?.enabled ? 1 : 0)) as extension (( extension?.locale || (extension?.update + '/')) + extension?.id)}
           {#if !extension?.nsfw || (settings.adult !== 'none')}
             {@const key = (extension?.locale || (extension?.update + '/')) + extension?.id}
+            {@const enabled = settings.extensionsNew[key]?.enabled}
             {@const isActive = extensionManager.isActive(key)}
             {@const isInactive = $status !== 'offline' && extensionManager.isInactive(key)}
             <div class='card m-0 p-15 mb-10 bg-dark-light border position-relative' style='border-color: {stringToHex(extension?.locale || extension?.update)} !important' class:extension-disabled={!settings.extensionsNew[key]?.enabled} class:extension-error={isInactive}>
-              {#if isInactive}
+              {#if enabled && isInactive}
                 <button class='btn position-absolute d-flex align-items-center justify-content-center border-0 p-0 z-10 bg-transparent icon-container' disabled={pendingSource} class:cursor-wait={pendingSource} data-toggle='tooltip' data-placement='right' data-title='Extension failed to validate. Click to retry.' use:click={() => validateExtension(key)}>
                   <div class='d-flex align-items-center justify-content-center error-indicator' style='color: var(--danger-color)'><TriangleAlert size='3.6rem' fill='var(--dark-color-light)'/></div>
                 </button>
-              {:else if !isActive}
+              {:else if enabled && !isActive}
                 <div class='position-absolute d-flex align-items-center justify-content-center border-0 p-0 z-10 rounded-circle bg-transparent icon-container' class:cursor-wait={pendingSource} data-toggle='tooltip' data-placement='right' data-title='Extension is loading...'>
                   <div class='d-flex align-items-center justify-content-center loadingIcon'/>
                 </div>
@@ -186,25 +187,34 @@
                 {:else}
                   <FileQuestion size='4.3rem' />
                 {/if}
-                <div class='ml-10 mb-5 mb-md-0'>
-                  <div class='font-size-18 font-weight-bold d-flex align-items-center' title={extension?.name}>
-                    {(extension?.name || extension?.id).slice(0, 16)}{extension?.name?.length > 16 ? '...' : ''}
-                    {#if extension?.deprecated}
-                      <div class='ml-10 d-flex align-items-center' data-toggle='tooltip' data-placement='top' data-title='This extension is deprecated and no longer maintained' style='color: var(--warning-color)'><CircleAlert size='2rem'/></div>
-                    {/if}
+                <div class='ml-10 mb-5 mb-md-0 w-full'>
+                  <div class='d-flex'>
+                    <div class='font-size-18 font-weight-bold d-flex align-items-center text-break-word' title={extension?.name}>
+                      {(extension?.name || extension?.id).slice(0, 16)}{extension?.name?.length > 16 ? '...' : ''}
+                    </div>
+                    <div class='d-flex ml-auto pl-10 align-items-center gap-10 h-20'>
+                      {#if extension?.deprecated}
+                        <div class='d-flex align-items-center' data-toggle='tooltip' data-placement='top' data-title='This extension is deprecated and no longer maintained' style='color: var(--warning-color)'><CircleAlert size='2rem'/></div>
+                      {/if}
+                      {#if settings.extensionsNew[key]}
+                        <div class='custom-switch fit-content'>
+                          <input type='checkbox' id={`extension-${key}`} bind:checked={settings.extensionsNew[key].enabled}
+                            on:change={event => {
+                              if (event.target.checked) extensionManager.enableExtension(key)
+                              else extensionManager.disableExtension(key)
+                            }}
+                          />
+                          <label for={`extension-${key}`}><br/></label>
+                        </div>
+                      {/if}
+                    </div>
                   </div>
                   {#if extension?.description}
-                    <div class='text-muted pre-wrap'>
+                    <div class='text-muted pre-wrap text-break-word'>
                       {@html parseSafeMarkdown(extension.description.slice(0, 500) + (extension.description.length > 500 ? '...' : ''))}
                     </div>
                   {/if}
                 </div>
-                {#if settings.extensionsNew[key]}
-                  <div class='custom-switch fit-content ml-auto mt-5'>
-                    <input type='checkbox' id={`extension-${key}`} bind:checked={settings.extensionsNew[key].enabled} />
-                    <label for={`extension-${key}`}><br/></label>
-                  </div>
-                {/if}
               </div>
               <div class='d-flex flex-wrap align-items-end'>
                 <span class='badge border-0 bg-light pl-10 pr-10 mt-10 font-scale-16'>{extension?.version}</span>
