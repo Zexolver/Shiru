@@ -231,9 +231,9 @@ class AnilistClient {
   /** @type {(options: RequestInit) => Promise<any>} */
   handleRequest = this.limiter.wrap(async opts => {
     await this.rateLimitPromise
+    if (status.value.match(/offline/i)) throw new Error('AniList API is temporarily disabled or network is offline')
     trace(`[${this.numberOfQueries}] requesting`, JSON.stringify({ ...opts, headers: { ...opts.headers, Authorization: opts.headers.Authorization ? '[redacted]' : undefined } }))
     this.numberOfQueries++
-    if (status.value.match(/offline/i)) throw new Error('AniList API is temporarily disabled or network is offline')
     let res = {}
     try {
       res = await fetch('https://graphql.anilist.co', opts)
