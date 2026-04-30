@@ -255,7 +255,7 @@
                     <div class='bt-10 pt-15 mx-5'>
                       {#each extension.settings as field, index}
                         {@const fieldKey = field.key.slice(0, 100)}
-                        {@const fieldDefault = field.default ? field.default.slice(0, 100) : field.default}
+                        {@const fieldDefault = Array.isArray(field.default) ? field.default.map(value => typeof value === 'string' ? value.slice(0, 100) : value) : typeof field.default === 'string' ? field.default.slice(0, 100) : field.default}
                         <div class='d-flex flex-column flex-md-row align-items-md-center justify-content-between' class:mb-15={index < extension.settings.length - 1}>
                           <div class='mr-md-80 mb-5 mb-md-0'>
                             <label class='font-weight-semi-bold font-scale-16 mb-0' for='ext-setting-{key}-{fieldKey}'>
@@ -294,9 +294,50 @@
                                 class='form-control bg-dark text-truncate w-auto wm-300 align-self-start'
                                 on:change={event => setSettingValue(key, fieldKey, event.target.value)}>
                               {#each field.options as option}
-                                <option value={option.value.slice(0, 100)} selected={getSettingValue(key, fieldKey, fieldDefault) === option.value}>{option.label.slice(0, 50)}</option>
+                                <option value={option.value.slice(0, 100)} selected={getSettingValue(key, fieldKey, fieldDefault) === option.value.slice(0, 100)}>{option.label.slice(0, 50)}</option>
                               {/each}
                             </select>
+                          {:else if field.type === 'multiselect'}
+                            {@const currentValues = (getSettingValue(key, fieldKey, fieldDefault ?? []) ?? [])}
+                            <div class='d-flex flex-column align-self-start'>
+                              {#each currentValues as selected, i}
+                                <div class='input-group mb-10'>
+                                  <select
+                                      id='ext-setting-{key}-{fieldKey}-{i}'
+                                      class='form-control bg-dark text-truncate w-auto wm-300 align-self-start'
+                                      on:change={event => {
+                                        const current = [...currentValues]
+                                        current[i] = event.target.value
+                                        setSettingValue(key, fieldKey, current)}}>
+                                    {#each (field.options ?? []).filter(option => { const value = option.value.slice(0, 100); return !currentValues.some((_v, _i) => _i !== i && _v === value) }) as option}
+                                      <option value={option.value.slice(0, 100)} selected={selected === option.value.slice(0, 100)}>{option.label.slice(0, 50)}</option>
+                                    {/each}
+                                  </select>
+                                  <div class='input-group-append'>
+                                    <button
+                                        type='button'
+                                        class='btn btn-danger btn-square input-group-append px-5 d-flex align-items-center'
+                                        on:click={() => {
+                                          const current = [...currentValues]
+                                          current.splice(i, 1)
+                                          setSettingValue(key, fieldKey, current)
+                                        }}>
+                                      <Trash2 size='1.8rem' />
+                                    </button>
+                                  </div>
+                                </div>
+                              {/each}
+                              <button
+                                  type='button'
+                                  disabled={(field.options ?? []).every(option => currentValues.includes(option.value.slice(0, 100)))}
+                                  class='btn btn-primary mb-10 d-flex align-items-center justify-content-center'
+                                  on:click={() => {
+                                    const first = (field.options ?? []).find(option => !currentValues.includes(option.value.slice(0, 100)))
+                                    if (first) setSettingValue(key, fieldKey, [...currentValues, first.value.slice(0, 100)])
+                                  }}>
+                                <span>Add Option</span>
+                              </button>
+                            </div>
                           {/if}
                         </div>
                       {/each}

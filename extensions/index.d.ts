@@ -31,7 +31,7 @@ export interface SourceConfig {
     icon?: string // URL or base64 encoded image that represents your source, it is suggested to use base64 encoding
 }
 
-export type SourceSetting = TextSetting | ToggleSetting | DropdownSetting
+export type SourceSetting = TextSetting | ToggleSetting | DropdownSetting | MultiSelectSetting
 
 interface BaseSourceSetting {
     key: string // Unique key used to access the setting value in your extension via this.settings. Max 100 characters.
@@ -56,6 +56,12 @@ export interface DropdownSetting extends BaseSourceSetting {
     type: 'dropdown'
     options: DropdownOption[] // Required, must have at least one option
     default?: string // Should match one of the option values. Max 100 characters.
+}
+
+export interface MultiSelectSetting extends BaseSourceSetting {
+    type: 'multiselect'
+    options: DropdownOption[] // Required, must have at least one option
+    default?: string[] // Each value should match one of the option values. Max 100 characters per value.
 }
 
 export interface DropdownOption {

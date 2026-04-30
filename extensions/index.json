@@ -2,7 +2,7 @@
   {
     "id": "example",
     "name": "Dummy Extension",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "main": "sources/example",
     "update": "gh:RockinChaos/Shiru/extensions",
     "type": "torrent",
@@ -38,6 +38,24 @@
           { "label": "English", "value": "en" },
           { "label": "Japanese", "value": "ja" },
           { "label": "French", "value": "fr" }
+        ]
+      },
+      {
+        "type": "multiselect",
+        "key": "audioLanguages",
+        "label": "Audio Languages",
+        "default": ["en", "ja"],
+        "description": "Only return results that include audio in the selected languages.",
+        "options": [
+          { "label": "English", "value": "en" },
+          { "label": "Japanese", "value": "ja" },
+          { "label": "French", "value": "fr" },
+          { "label": "German", "value": "de" },
+          { "label": "Spanish", "value": "es" },
+          { "label": "Portuguese", "value": "pt" },
+          { "label": "Italian", "value": "it" },
+          { "label": "Korean", "value": "ko" },
+          { "label": "Chinese", "value": "zh" }
         ]
       }
     ],

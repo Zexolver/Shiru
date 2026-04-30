@@ -593,10 +593,22 @@ class ExtensionManager {
     if (Array.isArray(config.settings)) {
       return config.settings.every(setting => {
         if (!setting.key || !setting.label || !setting.type) return false
-        if (!['text', 'toggle', 'dropdown'].includes(setting.type)) return false
-        if (setting.type === 'dropdown') {
+        if (!['text', 'toggle', 'dropdown', 'multiselect'].includes(setting.type)) return false
+        if (['dropdown', 'multiselect'].includes(setting.type)) {
           if (!Array.isArray(setting.options) || !setting.options.length) return false
-          return setting.options.every(option => option.label && option.value)
+          if (!setting.options.every(option => option.label && option.value)) return false
+          const validValues = setting.options.map(option => option.value)
+          if ('default' in setting) {
+            if (setting.type === 'dropdown') {
+              if (!validValues.includes(setting.default)) return false
+            } else if (setting.type === 'multiselect') {
+              if (!Array.isArray(setting.default) || !setting.default.every(value => validValues.includes(value))) return false
+            }
+          }
+        }
+        if ('default' in setting) {
+          if (setting.type === 'text' && typeof setting.default !== 'string') return false
+          if (setting.type === 'toggle' && typeof setting.default !== 'boolean') return false
         }
         return true
       })
