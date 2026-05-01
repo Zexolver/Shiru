@@ -208,7 +208,7 @@ class ExtensionManager {
       if (!extension.locale) {
         await cache.cacheEntry(caches.EXTENSIONS, key, { mappings: true }, newCode, Date.now() + getRandomInt(7, 14) * 24 * 60 * 60 * 1_000)
         try {
-          const initialize = await worker.initialize(key, newCode, { bypassCORS: SUPPORTS.isAndroid && extension.trusted})
+          const initialize = await worker.initialize(key, extension.type, newCode, { settings: settings.value.extensionsNew[key]?.settings ?? {},  bypassCORS: SUPPORTS.isAndroid && extension.trusted })
           if (!initialize.validated) {
             this.inactiveWorkers[key] = worker
             settings.set(settings.value)
@@ -314,7 +314,7 @@ class ExtensionManager {
     const promise = (async () => {
       const config = await getManifest(url)
       if (!config) {
-        await printError('Failed to load source', '', { message: `Failed to load source: ${url} ${status.value !== 'offline' ? 'the source is not valid.' : 'no network connection!'}`})
+        await printError('Failed to load source', '', { message: `Failed to load source: ${url} ${status.value !== 'offline' ? 'the source is not valid.' : 'no network connection!'}` })
         this.pending.delete(url)
         return `Failed to load extension(s) from the provided source '${url}': ${status.value !== 'offline' ? 'the source is not valid.' : 'no network connection!'}`
       }
@@ -431,7 +431,7 @@ class ExtensionManager {
             try {
               /** @type {comlink.Remote<import('@/modules/extensions/worker.js').Worker>} */
               const remoteWorker = await wrap(worker)
-              const initialize = await remoteWorker.initialize(key, modules[key], { settings: settings.value.extensionsNew[key]?.settings ?? {}, bypassCORS: SUPPORTS.isAndroid && extension.trusted })
+              const initialize = await remoteWorker.initialize(key, extension.type, modules[key], { settings: settings.value.extensionsNew[key]?.settings ?? {}, bypassCORS: SUPPORTS.isAndroid && extension.trusted })
               if (!initialize.validated && initialize.stub) {
                 await this.getExtensionCode(key, remoteWorker)
                 if (this.activeWorkers[key]) return
@@ -589,7 +589,7 @@ class ExtensionManager {
    */
   validateConfig(config) {
     if (!config || typeof config !== 'object') return false
-    if (!['id', 'name', 'version', 'main', 'update'].every(prop => prop in config)) return false
+    if (!['id', 'name', 'version', 'main', 'update', 'type'].every(prop => prop in config)) return false
     if (Array.isArray(config.settings)) {
       return config.settings.every(setting => {
         if (!setting.key || !setting.label || !setting.type) return false

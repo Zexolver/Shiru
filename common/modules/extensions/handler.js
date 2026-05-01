@@ -31,8 +31,7 @@ video.remove()
  * @returns {Promise<Map<string, { name: string, icon?: string, promise: Promise<any> }>>}
  * Returns a Map of extension results keyed by extension id, each containing metadata and a result promise.
  */
-export async function getResultsFromExtensions({ media, episode, batch, movie, resolution }) {
-  await extensionManager.whenReady.promise
+export async function getTorrentResults({ media, episode, batch, movie, resolution }) {
   debug(`Fetching sources for ${media?.id}:${media?.title?.userPreferred} ${episode} ${batch} ${movie} ${resolution}`)
   const aniDBMeta = await ALToAniDB(media)
   const { anidb_id: anidbAid, imdb_id: imdbAid, thetvdb_id: tvdbAid, themoviedb_id: mvdbAid } = aniDBMeta?.mappings || {}
@@ -60,16 +59,33 @@ export async function getResultsFromExtensions({ media, episode, batch, movie, r
     exclusions: settings.value.enableExternal ? [] : exclusions
   }
 
+  return queryExtensions('torrent', options, { movie, batch }, async (results) => {
+    const deduped = dedupe(results)
+    if (!deduped.length) return []
+    const parseObjects = await anitomyscript(deduped.map(r => r.title))
+    deduped.forEach((r, i) => r.parseObject = parseObjects[i])
+    return updatePeerCounts(deduped, !settings.value.torrentAutoScrape)
+  })
+}
+
+/**
+ * @param {'torrent'} type
+ * @param {object} options
+ * @param {object} queryTypes
+ * @param {function} processResults
+ */
+async function queryExtensions(type, options, queryTypes, processResults) {
+  await extensionManager.whenReady.promise
   const promises = new Map()
   const allExtensionKeys = Object.keys(settings.value.sourcesNew || {})
   if (!allExtensionKeys.length) {
-    debug(status.value !== 'offline' ? 'No torrent sources configured' : 'Torrent sources detected but are inactive')
+    debug(status.value !== 'offline' ? `No ${type} sources configured` : `Detected ${type} sources but they are inactive`)
     return new Map([
       ['NaN', {
         name: 'no-sources',
         promise: Promise.resolve({
           results: [],
-          errors: [{ message: status.value !== 'offline' ? 'No torrent sources configured. Add sources in settings.' : 'Sources are inactive.. found no results.' }]
+          errors: [{ message: status.value !== 'offline' ? `No ${type} sources configured. Add sources in settings.` : 'Sources are inactive.. found no results.' }]
         })
       }]
     ])
@@ -77,7 +93,7 @@ export async function getResultsFromExtensions({ media, episode, batch, movie, r
 
   for (const key of allExtensionKeys) {
     const source = settings.value.sourcesNew[key]
-    if (!source?.nsfw || settings.value.adult !== 'none') {
+    if ((source.type ?? 'torrent') === type && (!source?.nsfw || settings.value.adult !== 'none')) {
       const promise = (async () => {
         try {
           const extensionEnabled = settings.value.extensionsNew?.[key]?.enabled
@@ -87,15 +103,11 @@ export async function getResultsFromExtensions({ media, episode, batch, movie, r
             debug(`Extension ${key} is not available`)
             return { results: [], errors: [{ message: `Source ${source?.name || source?.id} is currently unavailable` }] }
           }
-          const { results, errors } = await worker.query(options, { movie, batch }, status.value !== 'offline', settings.value.extensionsNew?.[key])
+          const { results, errors } = await worker.query(options, queryTypes, status.value !== 'offline', settings.value.extensionsNew?.[key])
           if (errors?.length && !JSON.stringify(errors)?.match(/no anidb[ae]id provided/i)) throw new Error(errors?.map(error => (error?.message || JSON.stringify(error)).replace(/\\n/g, ' ').replace(/"/g, '')).join('\n') || 'Unknown error')
           else if (errors?.length) throw new Error('Source ' + source.id + ' found no results.')
           debug(`Extension ${key} found ${results?.length} results with ${errors?.length} errors`)
-          const deduped = dedupe(results)
-          if (!deduped.length) return []
-          const parseObjects = await anitomyscript(deduped.map(r => r.title))
-          deduped.forEach((r, i) => r.parseObject = parseObjects[i])
-          return await updatePeerCounts(deduped, !settings.value.torrentAutoScrape)
+          return await processResults(results)
         } catch (error) {
           debug(`Extension ${key} failed: ${error}`)
           return { results: [], errors: [{ message: error?.[0]?.message || error?.message }] }

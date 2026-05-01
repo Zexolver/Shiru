@@ -14,7 +14,7 @@
           <div class='font-size-22 text-center text-muted'>
             {#if JSON.stringify(errors)?.match(/found no results/i) || JSON.stringify(errors)?.match(/will be released on|hasn't released yet/i)}
               No results found.
-            {:else if (JSON.stringify(errors)?.match(/extension is not enabled/i) && !errors?.filter(error => !error?.message.match(/extension is not enabled/i))?.length) || JSON.stringify(errors)?.match(/no torrent sources/i)}
+            {:else if (JSON.stringify(errors)?.match(/extension is not enabled/i) && !errors?.filter(error => !error?.message.match(/extension is not enabled/i))?.length) || JSON.stringify(errors)?.match(/sources configured/i)}
               No Extensions Found
             {:else if errors?.length === 1 && Array.isArray(errors[0].message)}
               {errors[0].message[0]}

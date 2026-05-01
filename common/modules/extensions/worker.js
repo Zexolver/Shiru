@@ -20,16 +20,19 @@ class Worker {
   id
   source
   module
+  type
   cache = new Map()
 
   /**
    * Load and validate the source from code
    * @param {string} id
+   * @param {'torrent'} type
    * @param {object} module
    * @param {{settings: Record<string, any>, bypassCORS: boolean}} opts
    * @returns {Promise<{ validated: true } | { error: string } | { stub: boolean, error: string }>}
    */
-  async initialize(id, module, opts) {
+  async initialize(id, type = 'torrent', module, opts) {
+    this.type = type
     this.module = module
     try {
       let source
@@ -86,7 +89,7 @@ class Worker {
    * @param {boolean} online
    * @param {{enabled: boolean}} sourceOptions
    */
-  async query (options, types, online, sourceOptions) {
+  async query (options, types = {}, online, sourceOptions) {
     /** @type {Promise<{ results: Result[], errors: string[] }>[]} */
     const promises = []
     if (!sourceOptions?.enabled) return { results: [], errors: [{ message: 'Extension is not enabled.. skipping...' }] }
@@ -117,11 +120,13 @@ class Worker {
    * @param {{ movie: boolean, batch: boolean }} types
    * @returns {Promise<{ results: Result[], errors: string[] }>}
    */
-  async _querySource (source, options, { movie, batch }) {
+  async _querySource (source, options, { movie, batch } = {}) {
     const promises = []
-    promises.push(source.single(options))
-    if (movie) promises.push(source.movie(options))
-    if (batch) promises.push(source.batch(options))
+    if (this.type === 'torrent') {
+      promises.push(source.single(options))
+      if (movie) promises.push(source.movie(options))
+      if (batch) promises.push(source.batch(options))
+    }
 
     const results = []
     const errors = []
