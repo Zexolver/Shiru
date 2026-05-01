@@ -455,9 +455,10 @@
       if (duration) {
         WPC.clear('externalWatched', watchedListener)
         watchedListener = (detail) => {
-          checkCompletionByTime(detail, duration * 60)
-          currentTime = detail
-          targetTime = detail
+          const watchDuration = duration * 60
+          checkCompletionByTime(detail, watchDuration)
+          currentTime = detail > watchDuration ? watchDuration : detail
+          targetTime = detail > watchDuration ? watchDuration : detail
           launchedExternal = false
         }
         WPC.listen('externalWatched', watchedListener)
@@ -469,9 +470,10 @@
           const startTime = Date.now()
           const externalWatched = () => {
             const watchTime = (Date.now() - startTime) / 1_000
-            checkCompletionByTime(watchTime, duration * 60)
-            currentTime = watchTime
-            targetTime = watchTime
+            const watchDuration = duration * 60
+            checkCompletionByTime(watchTime, watchDuration)
+            currentTime = watchTime > watchDuration ? watchDuration : watchTime
+            targetTime = watchTime > watchDuration ? watchDuration : watchTime
             launchedExternal = false
           }
           ANDROID.launchExternal?.(url)?.then?.(() => externalWatched())
