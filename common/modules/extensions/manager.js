@@ -507,6 +507,14 @@ class ExtensionManager {
     const extensionIds = Object.keys(currentExtensions || {})
     if (!extensionIds?.length) return false
     try {
+      // Check for source repository updates
+      const sourceUrls = Object.keys(extensionSources || {})
+      if (sourceUrls.length) {
+        debug(`Checking ${sourceUrls.length} stored source repositories for updates...`)
+        await Promise.all(sourceUrls.map(url => this.updateSources(url)))
+      }
+
+      // Check for extension source updates
       const latestManifests = await Promise.all([...new Set(Object.values(currentExtensions).map(ext => ext?.locale || ext?.update).filter(Boolean))].map(url => getManifest(url, true)))
       const validManifests = latestManifests.filter(manifest => manifest != null && Array.isArray(manifest))
       if (validManifests.length === 0) {
@@ -556,11 +564,6 @@ class ExtensionManager {
           duration: 8_000
         })
         return true
-      }
-      const sourceUrls = Object.keys(extensionSources || {})
-      if (sourceUrls.length) {
-        debug(`Checking ${sourceUrls.length} stored source repositories for updates...`)
-        await Promise.all(sourceUrls.map(url => this.updateSources(url)))
       }
       return false
     } catch (error) {
