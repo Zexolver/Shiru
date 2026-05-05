@@ -252,6 +252,7 @@ class ExtensionManager {
 
   /**
    * Enables an extension by loading and validating it.
+   *
    * @param {string} key The extension key.
    * @returns {Promise<void>}
    */
@@ -265,6 +266,7 @@ class ExtensionManager {
 
   /**
    * Update settings of an active extension worker.
+   *
    * @param {string} key The extension key.
    * @returns {Promise<void>}
    */
@@ -279,6 +281,7 @@ class ExtensionManager {
 
   /**
    * Removes a specific extension source and clears related cache entries.
+   *
    * @param {string} extensionId The extension identifier.
    */
   async removeSource(extensionId) {
@@ -306,6 +309,7 @@ class ExtensionManager {
 
   /**
    * Adds a new extension source and validates its manifest.
+   *
    * @param {string} url The source URL.
    * @returns {Promise<string|void>} A status message or undefined.
    */
@@ -358,6 +362,7 @@ class ExtensionManager {
 
   /**
    * Gets a promise that resolves when a specific extension is ready (or rejects if it fails)
+   *
    * @param {string} key The extension key
    * @returns {Promise<import('comlink').Remote<import('@/modules/extensions/worker.js').Worker>|null>}
    */
@@ -373,6 +378,7 @@ class ExtensionManager {
 
   /**
    * Loads extension modules from cache or network and starts workers.
+   *
    * @param {object} extensions Extension metadata.
    * @param {boolean} update Whether this load is an update pass.
    * @returns {Promise<boolean>} True if successful, false otherwise.
@@ -492,6 +498,7 @@ class ExtensionManager {
 
   /**
    * Checks for newer versions of existing extensions and updates them.
+   *
    * @param {object} currentExtensions Currently installed extensions.
    * @param {object} extensionSources Currently added extension source repositories.
    * @returns {Promise<boolean>} True if updates were found, false otherwise.
@@ -564,6 +571,7 @@ class ExtensionManager {
 
   /**
    * Handles proxied network requests from workers (Android CORS workaround).
+   *
    * @param {MessageEvent} event Message from the worker.
    * @param {Worker} worker The worker sending the request.
    */
@@ -584,6 +592,7 @@ class ExtensionManager {
 
   /**
    * Validates that an extension configuration object has the required fields.
+   *
    * @param {object} config The extension config object.
    * @returns {boolean} True if valid, false otherwise.
    */

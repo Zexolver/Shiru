@@ -25,6 +25,7 @@ class Worker {
 
   /**
    * Load and validate the source from code
+   *
    * @param {string} id
    * @param {'torrent'} type
    * @param {object} module
@@ -64,12 +65,14 @@ class Worker {
   }
 
   /**
-   * Updates the settings on the active source instance.
+   * Updates the settings on the active source instance and clears the query cache.
    * Called by the extension manager when the user changes an extension setting.
+   *
    * @param {Record<string, any>} settings The settings object to apply.
    * @returns {Promise<void>}
    */
   async updateSettings(settings = {}) {
+    this.cache.clear()
     this.source.settings = settings
   }
 

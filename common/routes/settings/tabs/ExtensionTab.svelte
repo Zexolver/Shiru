@@ -247,7 +247,7 @@
                 {#if extension?.speed}<span class='badge border-0 bg-light pl-10 pr-10 ml-10 mt-10 font-scale-16' data-toggle='tooltip' data-placement='top' data-title='How quickly query results are received'>{capitalize(extension?.speed)}</span>{/if}
                 {#if extension?.accuracy}<span class='badge border-0 bg-light pl-10 pr-10 ml-10 mt-10 font-scale-16'  data-toggle='tooltip' data-placement='top' data-title='How accurate the query results are'>{capitalize(extension?.accuracy)} Accuracy</span>{/if}
                 {#if extension?.nsfw} <div class='d-flex align-items-center' title='Query results include adult content'><Adult class='ml-10 mt-10' size='2.2rem' /></div>{/if}
-                {#each extension?.regions || [] as region}<span class='ml-10 font-twemoji font-size-28 h-31' title='Location: {region}'>{toFlags(region)}</span>{/each}
+                {#each extension?.regions || [] as region}<span class='ml-10 font-twemoji font-size-28 h-31' title='Location: {region.toUpperCase() === `UN` ? `GLOBAL` : region}'>{toFlags(region)}</span>{/each}
               </div>
               {#if extension?.settings?.length && viewSettings[key]}
                 <div transition:slide={{ duration: 250, axis: 'y' }}>
@@ -259,12 +259,12 @@
                         <div class='d-flex flex-column flex-md-row align-items-md-center justify-content-between' class:mb-15={index < extension.settings.length - 1}>
                           <div class='mr-md-80 mb-5 mb-md-0'>
                             <label class='font-weight-semi-bold font-scale-16 mb-0' for='ext-setting-{key}-{fieldKey}'>
-                              {parseSafeMarkdown(field.label.slice(0, 35) + (field.label.length > 35 ? '...' : ''))}
+                              {@html parseSafeMarkdown(field.label.slice(0, 35) + (field.label.length > 35 ? '...' : ''))}
                               {#if field.required}<span class='text-danger ml-5'>*</span>{/if}
                             </label>
                             {#if field.description}
                               <div class='text-muted font-scale-14'>
-                                {parseSafeMarkdown(field.description.slice(0, 300) + (field.description.length > 300 ? '...' : ''))}
+                                {@html parseSafeMarkdown(field.description.slice(0, 300) + (field.description.length > 300 ? '...' : ''))}
                               </div>
                             {/if}
                           </div>
