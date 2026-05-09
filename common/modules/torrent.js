@@ -6,79 +6,23 @@ import { SUPPORTS } from '@/modules/support.js'
 import { status } from '@/modules/networking.js'
 import { writable } from 'simple-store-svelte'
 import { toast } from 'svelte-sonner'
+import { capitalize } from '@/modules/util.js'
 import clipboard from '@/modules/lib/clipboard.js'
 import { setHash } from '@/modules/anime/animehash.js'
 import { TORRENT, ELECTRON } from '@/modules/bridge.js'
-import WPC from '@/modules/wpc.js'
 import Debug from 'debug'
 const debug = Debug('ui:torrent')
 
 const excludedToastMessages = ['no buffer space', 'localDescription']
 const torrentRx = /(^magnet:){1}|(^[A-F\d]{8,40}$){1}|(.*\.torrent$){1}/i
 let _settings
-class TorrentWorker extends EventTarget {
 
-  constructor () {
-    super()
-    this.ready = new Promise(resolve => {
-      _settings = { userID: cache.cacheID, dht: !settings.value.torrentDHT, torrentUTP: !settings.value.torrentUTP, torrentPeX: !settings.value.torrentPeX, maxConns: settings.value.maxConns, downloadLimit: (settings.value.torrentSpeed * 1048576) || 0, uploadLimit: (settings.value.torrentSpeed * 1048576) || 0, torrentPort: settings.value.torrentPort || 0, dhtPort: settings.value.dhtPort || 0, torrentPersist: settings.value.torrentPersist, torrentStreamedDownload: settings.value.torrentStreamedDownload, torrentPathNew: settings.value.torrentPathNew, playerPath: settings.value.playerPath, seedingLimit: settings.value.seedingLimit, trackers: settings.value.trackers }
-      TORRENT.portRequest(_settings).then((port) => {
-        this.port = port
-        this.port.onmessage(this.handleMessage.bind(this))
-        resolve()
-      })
-    })
-  }
-
-  handleMessage ({ data }) {
-    this.dispatchEvent(new CustomEvent(data.type, { detail: data.data }))
-  }
-
-  async send (type, data, transfer) {
-    await this.ready
-    debug(`Sending message ${type}`, data && type !== 'load' ? JSON.stringify(data) : '')
-    this.port.postMessage({ type, data }, transfer)
-  }
-}
-
-export let client = new TorrentWorker()
+export const loadingSession = writable(true)
 export const loadedTorrent = writable({})
 export const stagingTorrents = writable([])
 export const seedingTorrents = writable([])
 export const completedTorrents = writable([])
-setupTorrentClient()
 
-status.subscribe(value => client.send('networking', value))
-settings.subscribe(value => {
-  let settingsVal = { userID: cache.cacheID, dht: !value.torrentDHT, torrentUTP: !value.torrentUTP, torrentPeX: !value.torrentPeX, maxConns: value.maxConns, downloadLimit: (value.torrentSpeed * 1048576) || 0, uploadLimit: (value.torrentSpeed * 1048576) || 0, torrentPort: value.torrentPort || 0, dhtPort: value.dhtPort || 0, torrentPersist: value.torrentPersist, torrentStreamedDownload: value.torrentStreamedDownload, torrentPathNew: value.torrentPathNew, playerPath: value.playerPath, seedingLimit: value.seedingLimit, trackers: value.trackers }
-  if (JSON.stringify(_settings) !== JSON.stringify(settingsVal)) {
-    _settings = settingsVal
-    client.send('settings', _settings)
-  }
-})
-
-TORRENT.onCrash(() => {
-  console.error('Ooops! WebTorrent Crashed! A crash has been detected... The process has automatically been restarted.')
-  toast.dismiss()
-  toast.error('Ooops! WebTorrent Crashed!', {
-    description: 'A crash has been detected... The process has automatically been restarted.',
-    duration: 15000
-  })
-  client = new TorrentWorker()
-  setupTorrentClient()
-})
-window.addEventListener('torrent-unload', () => {
-  files.value = []
-  media.value = { ...media.value, display: true } // set display to true to allow the 'Last Watched' button to remain on the SideBar.
-  client.send('unload', null) // this will not override the cached loadedTorrent, we rely on users to enable disableStartupTorrent if they don't want to load the previous torrent when the app starts.
-})
-window.addEventListener('add', (event) => add(event.detail.resolvedHash, event.detail.search, event.detail.resolvedHash))
-window.addEventListener('rescan', () => client.send('rescan'))
-TORRENT.onRequest((opts) => {
-  ELECTRON.showAndFocus()
-  add(opts.magnet, null, null, null, opts.base64)
-})
-window.addEventListener('play-torrent', (event) => add(event.detail.magnet, null, null, null, event.detail.base64))
 clipboard.addEventListener('text', ({ detail }) => {
   for (const { text } of detail) {
     if (page.value !== page.WATCH_TOGETHER && torrentRx.exec(text)) {
@@ -98,6 +42,93 @@ if (!SUPPORTS.isAndroid) {
   })
 }
 
+_settings = { userID: cache.cacheID, dht: !settings.value.torrentDHT, torrentUTP: !settings.value.torrentUTP, torrentPeX: !settings.value.torrentPeX, maxConns: settings.value.maxConns, downloadLimit: (settings.value.torrentSpeed * 1048576) || 0, uploadLimit: (settings.value.torrentSpeed * 1048576) || 0, torrentPort: settings.value.torrentPort || 0, dhtPort: settings.value.dhtPort || 0, torrentPersist: settings.value.torrentPersist, torrentStreamedDownload: settings.value.torrentStreamedDownload, torrentPathNew: settings.value.torrentPathNew, playerPath: settings.value.playerPath, seedingLimit: settings.value.seedingLimit, trackers: settings.value.trackers }
+TORRENT.portRequest(_settings).then(() => {
+  setupTorrentClient()
+  status.subscribe(value => TORRENT.updateNetwork(value))
+  settings.subscribe(value => {
+    let settingsVal = { userID: cache.cacheID, dht: !value.torrentDHT, torrentUTP: !value.torrentUTP, torrentPeX: !value.torrentPeX, maxConns: value.maxConns, downloadLimit: (value.torrentSpeed * 1048576) || 0, uploadLimit: (value.torrentSpeed * 1048576) || 0, torrentPort: value.torrentPort || 0, dhtPort: value.dhtPort || 0, torrentPersist: value.torrentPersist, torrentStreamedDownload: value.torrentStreamedDownload, torrentPathNew: value.torrentPathNew, playerPath: value.playerPath, seedingLimit: value.seedingLimit, trackers: value.trackers }
+    if (JSON.stringify(_settings) !== JSON.stringify(settingsVal)) {
+      _settings = settingsVal
+      TORRENT.updateSettings(_settings)
+    }
+  })
+
+  window.addEventListener('add', (event) => add(event.detail.resolvedHash, event.detail.search, event.detail.resolvedHash)) // TODO: Circular Dependency (MediaHandler.svelte)
+  TORRENT.onCrash(() => {
+    console.error('Ooops! WebTorrent Crashed! A crash has been detected... The process has automatically been restarted.')
+    toast.dismiss()
+    toast.error('Ooops! WebTorrent Crashed!', {
+      description: 'A crash has been detected... The process has automatically been restarted.',
+      duration: 15000
+    })
+    setupTorrentClient()
+  })
+  TORRENT.onRequest(opts => {
+    ELECTRON.showAndFocus()
+    debug(`Got torrent request for:`, JSON.stringify(opts))
+    add(opts.magnet, null, null, null, opts.base64)
+  })
+
+  TORRENT.onStats(detail => {
+    loadedTorrent.update(() => ({ ...detail.current }))
+    stagingTorrents.update(() => Array.from(new Map(detail.staging.map(torrent => [torrent.infoHash, torrent])).values()))
+    seedingTorrents.update(() => Array.from(new Map(detail.seeding.map(torrent => [torrent.infoHash, torrent])).values()))
+  })
+
+  TORRENT.onFiles(_files => {
+    debug(`Got files request:`, _files?.length)
+    files.set(_files)
+  })
+
+  TORRENT.onLoaded(detail => {
+    cache.setEntry(caches.GENERAL, 'loadedTorrent', detail)
+    debug(`Got loaded request for torrent:`, detail?.infoHash)
+    deduplicate(detail?.infoHash)
+  })
+
+  TORRENT.onUntrack(detail => {
+    debug(`Got untrack request for torrent:`, JSON.stringify(detail))
+    deduplicate(detail)
+  })
+
+  TORRENT.onStage(detail => {
+    debug(`Staging torrent:`, JSON.stringify(detail))
+    const torrents = cache.getEntry(caches.GENERAL, 'stagingTorrents') || []
+    if (!torrents.includes(detail)) {
+      cache.setEntry(caches.GENERAL, 'stagingTorrents', Array.from(new Set([...torrents, detail])))
+    }
+    const found = structuredClone(seedingTorrents.value.find(torrent => torrent.infoHash === detail) || completedTorrents.value.find(torrent => torrent.infoHash === detail))
+    deduplicate(detail, 'seedingTorrents', 'completedTorrents')
+    if (loadedTorrent.value?.infoHash === detail) loadedTorrent.update(() => ({}))
+    if (found) (found.incomplete ? stagingTorrents : seedingTorrents).update(prev => [found, ...prev.filter(torrent => torrent.infoHash !== detail)])
+  })
+
+  TORRENT.onSeed(detail => {
+    debug(`Seeding torrent:`, JSON.stringify(detail))
+    const torrents = cache.getEntry(caches.GENERAL, 'seedingTorrents') || []
+    if (!torrents.includes(detail)) cache.setEntry(caches.GENERAL, 'seedingTorrents', Array.from(new Set([...torrents, detail])))
+    deduplicate(detail, 'stagingTorrents', 'completedTorrents')
+  })
+
+  TORRENT.onComplete(detail => {
+    debug(`Completed torrent:`, JSON.stringify(detail))
+    const torrents = cache.getEntry(caches.GENERAL, 'completedTorrents') || []
+    if (!torrents.includes(detail?.infoHash)) cache.setEntry(caches.GENERAL, 'completedTorrents', Array.from(new Set([...torrents, detail.infoHash])))
+    deduplicate(detail?.infoHash, 'stagingTorrents', 'seedingTorrents')
+    if (loadedTorrent.value?.infoHash === detail.infoHash) loadedTorrent.update(() => ({}))
+    completedTorrents.update(prev => [detail, ...prev.filter(torrent => torrent.infoHash !== detail.infoHash)])
+  })
+
+  TORRENT.onCompletedStats(detail => {
+    debug('Got completed stats request')
+    completedTorrents.update(torrents => [...Array.from(new Map(detail.map(torrent => [torrent.infoHash, torrent])).values()), ...torrents])
+    loadingSession.set(false)
+  })
+
+  TORRENT.onNotify(notify)
+})
+
 export async function add(torrentID, search, hash, magnet, base64 = false) {
   if (torrentID) {
     debug('Adding torrent', JSON.stringify({ torrentID, search, hash, magnet }))
@@ -106,14 +137,14 @@ export async function add(torrentID, search, hash, magnet, base64 = false) {
     media.value = search ? { media: (search.media || media.value?.media), episode: (search.episode || media.value?.episode), ...(media.value?.torrent ? { torrent: true } : { feed: true }) } : { torrent: true }
     if (hash && search) setHash(hash, { mediaId: search.media?.id, episode: search.episode, client: true })
     if (SUPPORTS.isAndroid && !settings.value.enableExternal) document.querySelector('.content-wrapper').requestFullscreen() // this WILL not work with auto-select torrents due to permissions check.
-    client.send('torrent', { id: torrentID, hash: (hash === torrentID && torrentID) || false, magnet, base64 })
+    TORRENT.stream(torrentID, (hash === torrentID && torrentID) || false, magnet, base64)
   }
 }
 export async function stage(torrentID, search, hash) {
   if (torrentID) {
     debug('Pre-Adding torrent', JSON.stringify({ torrentID, search, hash }))
     if (hash && search) setHash(hash, { mediaId: search.media?.id, episode: search.episode, client: true })
-    client.send('stage', { id: torrentID, hash: (hash === torrentID && torrentID) || false })
+    TORRENT.stage(torrentID, (hash === torrentID && torrentID) || false)
     if (hash) {
       const existingTorrent = seedingTorrents.value.find(torrent => torrent.infoHash === hash) || completedTorrents.value.find(torrent => torrent.infoHash === hash)
       if (existingTorrent) {
@@ -124,34 +155,43 @@ export async function stage(torrentID, search, hash) {
     }
   }
 }
-export async function unload(torrent, hash) {
+export async function unload(torrent, hash, force = false) {
   if (torrent) {
     debug('Unloading torrent', JSON.stringify({ torrent, hash }))
-    client.send('unload', { torrent, hash })
+    TORRENT.unload({ torrent, hash })
+  } else if (force) {
+    files.value = []
+    media.value = { ...media.value, display: true } // set display to true to allow the 'Last Watched' button to remain on the SideBar.
+    TORRENT.unload(null) // this will not override the cached loadedTorrent, we rely on users to enable disableStartupTorrent if they don't want to load the previous torrent when the app starts.
   }
 }
 export async function untrack(hash) {
   if (hash) {
     debug('Untracking torrent', hash)
-    client.send('untrack', hash)
+    if (loadedTorrent.value?.infoHash === hash) {
+      files.value = []
+      media.value = { ...media.value, display: true } // set display to true to allow the 'Last Watched' button to remain on the SideBar.
+    }
+    TORRENT.untrack(hash)
   }
 }
 export async function complete(hash) {
   if (hash) {
     debug('Stopping Seeding torrent', hash)
-    client.send('complete', hash)
+    TORRENT.complete(hash)
   }
 }
 export async function reannounce(hash) {
   if (hash) {
     debug('Requesting reannounce for torrent', hash)
-    client.send('reannounce', hash)
+    TORRENT.reannounce(hash)
   }
 }
 
-function deduplicateTorrents(hash, ..._caches) {
+function deduplicate(hash, ..._caches) {
   if (!hash) return
-  for (const cacheName of _caches) {
+  const cacheList = _caches.length ? _caches : ['stagingTorrents', 'seedingTorrents', 'completedTorrents']
+  for (const cacheName of cacheList) {
     const list = cache.getEntry(caches.GENERAL, cacheName) || []
     const filtered = list.filter(h => h !== hash)
     if (filtered.length !== list.length) {
@@ -159,110 +199,38 @@ function deduplicateTorrents(hash, ..._caches) {
       cache.setEntry(caches.GENERAL, cacheName, filtered)
     }
   }
+  if (_caches.includes('stagingTorrents') || !_caches.length) stagingTorrents.update(arr => arr.filter(torrent => torrent.infoHash !== hash))
+  if (_caches.includes('seedingTorrents') || !_caches.length) seedingTorrents.update(arr => arr.filter(torrent => torrent.infoHash !== hash))
+  if (_caches.includes('completedTorrents') || !_caches.length) completedTorrents.update(arr => arr.filter(torrent => torrent.infoHash !== hash))
 }
 
 function setupTorrentClient() {
+  loadingSession.set(true)
   loadedTorrent.value = {}
   stagingTorrents.value = []
   seedingTorrents.value = []
   completedTorrents.value = []
-  if (!settings.value.disableStartupTorrent) {
-    client.send('load', cache.getEntry(caches.GENERAL, 'loadedTorrent'))
-    client.send('stage_all', cache.getEntry(caches.GENERAL, 'stagingTorrents').filter(Boolean))
-    client.send('seed_all', cache.getEntry(caches.GENERAL, 'seedingTorrents').filter(Boolean))
-  } else {
+  if (!settings.value.disableStartupTorrent) TORRENT.restoreSession(cache.getEntry(caches.GENERAL, 'stagingTorrents').filter(Boolean), cache.getEntry(caches.GENERAL, 'seedingTorrents').filter(Boolean), cache.getEntry(caches.GENERAL, 'completedTorrents').filter(Boolean), cache.getEntry(caches.GENERAL, 'loadedTorrent'))
+  else {
     debug(`Unloading torrent(s) from previous session`)
-    client.send('unload', cache.getEntry(caches.GENERAL, 'loadedTorrent'))
+    TORRENT.unload(cache.getEntry(caches.GENERAL, 'loadedTorrent'))
+    const unloadedCompleted = Array.from(new Set([...(cache.getEntry(caches.GENERAL, 'completedTorrents') || []), ...(cache.getEntry(caches.GENERAL, 'seedingTorrents') || []), ...(cache.getEntry(caches.GENERAL, 'stagingTorrents') || [])])).filter(Boolean)
     cache.setEntry(caches.GENERAL, 'loadedTorrent', {})
-    cache.setEntry(caches.GENERAL, 'completedTorrents', Array.from(new Set([...(cache.getEntry(caches.GENERAL, 'completedTorrents') || []), ...(cache.getEntry(caches.GENERAL, 'seedingTorrents') || []), ...(cache.getEntry(caches.GENERAL, 'stagingTorrents') || [])])))
+    cache.setEntry(caches.GENERAL, 'completedTorrents', unloadedCompleted)
     cache.setEntry(caches.GENERAL, 'stagingTorrents', [])
     cache.setEntry(caches.GENERAL, 'seedingTorrents', [])
+    TORRENT.restoreSession(null, null, unloadedCompleted)
   }
-  client.send('complete_all', cache.getEntry(caches.GENERAL, 'completedTorrents').filter(Boolean))
+}
 
-  for (const event of ['magnet', 'stats', 'chapters', 'progress', 'externalReady', 'externalWatched', 'androidExternal', 'scrape_done', 'rescan_done']) client.addEventListener(event, ({ detail }) => WPC.send(event, detail))
-  for (const event of ['current', 'scrape', 'externalPlay', 'debug']) WPC.listen(event, (detail) => client.send(event, detail))
-
-  client.addEventListener('activity', ({ detail }) => {
-    loadedTorrent.update(() => ({ ...detail.current }))
-    stagingTorrents.update(() => Array.from(new Map(detail.staging.map(torrent => [torrent.infoHash, torrent])).values()))
-    seedingTorrents.update(() => Array.from(new Map(detail.seeding.map(torrent => [torrent.infoHash, torrent])).values()))
-  })
-
-  client.addEventListener('files', ({ detail }) => files.set(detail))
-
-  client.addEventListener('loaded', ({ detail }) => {
-    cache.setEntry(caches.GENERAL, 'loadedTorrent', detail)
-    deduplicateTorrents(detail?.infoHash, 'stagingTorrents', 'seedingTorrents', 'completedTorrents')
-    client.dispatchEvent(new CustomEvent('untrack', { detail: detail?.infoHash }))
-  })
-  client.addEventListener('untrack', ({ detail }) => {
-    debug(`Untracking torrent:`, JSON.stringify(detail))
-    for (const category of ['stagingTorrents', 'seedingTorrents', 'completedTorrents']) {
-      const list = cache.getEntry(caches.GENERAL, category) || []
-      if (list.includes(detail)) cache.setEntry(caches.GENERAL, category, list.filter(h => h !== detail))
-    }
-    stagingTorrents.update(arr => arr.filter(torrent => torrent.infoHash !== detail))
-    seedingTorrents.update(arr => arr.filter(torrent => torrent.infoHash !== detail))
-    completedTorrents.update(arr => arr.filter(torrent => torrent.infoHash !== detail))
-  })
-  client.addEventListener('staging', ({ detail }) => {
-    debug(`Staging torrent:`, JSON.stringify(detail))
-    const torrents = cache.getEntry(caches.GENERAL, 'stagingTorrents') || []
-    if (!torrents.includes(detail)) {
-      cache.setEntry(caches.GENERAL, 'stagingTorrents', Array.from(new Set([...torrents, detail])))
-    }
-    deduplicateTorrents(detail, 'seedingTorrents', 'completedTorrents')
-    const found = structuredClone(loadedTorrent.value?.infoHash === detail || seedingTorrents.value.find(torrent => torrent.infoHash === detail) || completedTorrents.value.find(torrent => torrent.infoHash === detail))
-    if (loadedTorrent.value?.infoHash === detail) loadedTorrent.update(() => ({}))
-    seedingTorrents.update(torrents => torrents.filter(torrent => torrent.infoHash !== detail))
-    completedTorrents.update(torrents => torrents.filter(torrent => torrent.infoHash !== detail))
-    if (found) (found.incomplete ? stagingTorrents : seedingTorrents).update(prev => [found, ...prev.filter(torrent => torrent.infoHash !== detail)])
-  })
-  client.addEventListener('seeding', ({ detail }) => {
-    debug(`Seeding torrent:`, JSON.stringify(detail))
-    const torrents = cache.getEntry(caches.GENERAL, 'seedingTorrents') || []
-    if (!torrents.includes(detail)) cache.setEntry(caches.GENERAL, 'seedingTorrents', Array.from(new Set([...torrents, detail])))
-    deduplicateTorrents(detail, 'stagingTorrents', 'completedTorrents')
-  })
-  client.addEventListener('completed', ({ detail }) => {
-    debug(`Completed torrent:`, JSON.stringify(detail))
-    const torrents = cache.getEntry(caches.GENERAL, 'completedTorrents') || []
-    if (!torrents.includes(detail?.infoHash)) cache.setEntry(caches.GENERAL, 'completedTorrents', Array.from(new Set([...torrents, detail.infoHash])))
-    deduplicateTorrents(detail?.infoHash, 'stagingTorrents', 'seedingTorrents')
-    if (loadedTorrent.value?.infoHash === detail.infoHash) loadedTorrent.update(() => ({}))
-    stagingTorrents.update(arr => arr.filter(torrent => torrent.infoHash !== detail.infoHash))
-    seedingTorrents.update(arr => arr.filter(torrent => torrent.infoHash !== detail.infoHash))
-    completedTorrents.update(prev => [detail, ...prev.filter(torrent => torrent.infoHash !== detail.infoHash)])
-  })
-  client.addEventListener('completedStats', ({ detail }) => {
-    WPC.send('rescan_done')
-    completedTorrents.update(torrents => [...Array.from(new Map(detail.map(torrent => [torrent.infoHash, torrent])).values()), ...torrents])
-  })
-
-  client.addEventListener('error', ({ detail }) => {
-    debug(`Error:`, detail.message || JSON.stringify(detail))
-    if (settings.value.toasts.includes('All') || settings.value.toasts.includes('Errors')) {
-      for (const exclude of excludedToastMessages) {
-        if ((detail.message || detail)?.toLowerCase()?.includes(exclude)) return
-      }
-      toast.error('Torrent Error', { description: '' + (detail.message || detail) })
-    }
-  })
-  client.addEventListener('warn', ({ detail }) => {
-    debug(`Warn:`, detail.message || JSON.stringify(detail))
-    if (settings.value.toasts.includes('All') || settings.value.toasts.includes('Warnings')) {
-      for (const exclude of excludedToastMessages) {
-        if ((detail.message || detail)?.toLowerCase()?.includes(exclude)) return
-      }
-      toast.warning('Torrent Warning', { description: '' + (detail.message || detail) })
-    }
-  })
-  client.addEventListener('info', ({ detail }) => {
-    debug(`Info:`, detail.message || JSON.stringify(detail))
+function notify(type, detail) {
+  debug(`${capitalize(type)}:`, detail.message || JSON.stringify(detail))
+  if (type === 'info' || settings.value.toasts.includes('All') || settings.value.toasts.includes('Warnings')) {
     for (const exclude of excludedToastMessages) {
       if ((detail.message || detail)?.toLowerCase()?.includes(exclude)) return
     }
-    toast('Torrent Info', { description: '' + (detail.message || detail) })
-  })
+    if (type === 'warn') toast.warning(`Torrent Warning`, { description: '' + (detail.message || detail) })
+    else if (type === 'error') toast.error(`Torrent Error`, { description: '' + (detail.message || detail) })
+    else toast(`Torrent ${capitalize(type)}`, { description: '' + (detail.message || detail) })
+  }
 }

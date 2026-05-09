@@ -1,12 +1,10 @@
 <script>
   import { onDestroy } from 'svelte'
-  import { formatMap, genreIcons, getEpisodeMetadataForMedia, getKitsuMappings, getMediaMaxEp, playMedia } from '@/modules/anime/anime.js'
-  import { playAnime } from '@/modals/torrent/TorrentModal.svelte'
+  import { formatMap, genreIcons, play, getEpisodeMetadataForMedia, getKitsuMappings, getMediaMaxEp } from '@/modules/anime/anime.js'
   import { copyToClipboard } from '@/modules/lib/clipboard.js'
   import { settings } from '@/modules/settings.js'
   import { mediaCache } from '@/modules/cache.js'
   import { anilistClient } from '@/modules/providers/anilist/anilist.js'
-  import { isValidNumber } from '@/modules/util.js'
   import { click } from '@/modules/lib/click.js'
   import Details from '@/modals/details/components/Details.svelte'
   import EpisodeList from '@/modals/details/components/EpisodeList.svelte'
@@ -16,7 +14,7 @@
   import SmartImage from '@/components/visual/SmartImage.svelte'
   import AudioLabel from '@/components/AudioLabel.svelte'
   import Following from '@/modals/details/components/Following.svelte'
-  import { COMMON, ELECTRON } from '@/modules/bridge.js'
+  import { COMMON } from '@/modules/bridge.js'
   import SmallCard from '@/components/cards/SmallCard.svelte'
   import SmallCardSk from '@/components/skeletons/SmallCardSk.svelte'
   import Helper from '@/modules/providers/helper.js'
@@ -77,12 +75,6 @@
   function checkClose ({ keyCode }) {
     if (keyCode === 27) close()
   }
-  function play (media, episode, force = false) {
-    if (!media) return
-    if (isValidNumber(episode)) return playAnime(media, episode, force)
-    if (media.status === 'NOT_YET_RELEASED') return
-    playMedia(media)
-  }
   function getPlayButtonText (media) {
     if (media?.mediaListEntry) {
       const { status, progress } = media.mediaListEntry
@@ -100,27 +92,6 @@
   function toggleFavourite () {
     media.isFavourite = anilistClient.favourite({ id: media.id, isFavourite: !media.isFavourite })
   }
-
-  function handlePlay(id, episode, torrentOnly) {
-    const cachedMedia = mediaCache.value[id]
-    if (!cachedMedia) return
-    const cachedEpisode = isValidNumber(episode) ? episode : cachedMedia?.mediaListEntry?.progress
-    const desiredEpisode = (isValidNumber(episode) ? episode : cachedEpisode && cachedEpisode !== 0 ? cachedEpisode + 1 : cachedEpisode)
-    if (torrentOnly) {
-      if (desiredEpisode) return playAnime(cachedMedia, desiredEpisode)
-      if (cachedMedia?.status === 'NOT_YET_RELEASED') return
-      playMedia(cachedMedia)
-    } else play(cachedMedia, desiredEpisode)
-  }
-
-  COMMON.onRequestPlay((opts) => {
-    ELECTRON.showAndFocus()
-    handlePlay(opts.id, opts.episode, opts.torrentOnly)
-  })
-  window.addEventListener('play-anime', (event) => {
-    const { id, episode, torrentOnly } = event.detail
-    handlePlay(id, episode, torrentOnly)
-  })
 
   function sanitize(body) {
     if (!body) return ''

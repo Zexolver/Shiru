@@ -54,7 +54,8 @@
     if (!targetFile) {
       const resolvedHash = getHash(obj.media?.id, { episode: obj.episode, client: true, batchGuess: true }, false, true)
       if (resolvedHash) { // We have a cached and active hash with the requested media and episode, its predicted we should use this.
-          window.dispatchEvent(new CustomEvent('add', { detail: { resolvedHash, search: { media: obj.media, episode: obj.episode } } }))
+          //add(resolvedHash, { media: obj.media, episode: obj.episode }, resolvedHash)
+          window.dispatchEvent(new CustomEvent('add', { detail: { resolvedHash, search: { media: obj.media, episode: obj.episode } } })) // TODO: Circular Dependency (torrent.js)
           return true
       }
       return false

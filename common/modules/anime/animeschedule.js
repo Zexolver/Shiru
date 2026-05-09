@@ -4,13 +4,12 @@ import { anilistClient } from '@/modules/providers/anilist/anilist.js'
 import { malDubs } from '@/modules/anime/animedubs.js'
 import { settings } from '@/modules/settings.js'
 import { cache, caches } from '@/modules/cache.js'
-import { getEpisodeMetadataForMedia, isSubbedProgress } from '@/modules/anime/anime.js'
+import { handlePlay, getEpisodeMetadataForMedia, isSubbedProgress } from '@/modules/anime/anime.js'
 import { queueNotification } from '@/modules/notification/manager.js'
-import { hasNextPage } from '@/modules/sections.js'
+import { hasNextPage, updateSections } from '@/modules/sections.js'
 import { printError } from '@/modules/networking.js'
 import Helper from '@/modules/providers/helper.js'
 import equal from 'fast-deep-equal/es6'
-import WPC from '@/modules/wpc.js'
 import Debug from 'debug'
 const debug = Debug('ui:animeschedule')
 
@@ -92,7 +91,7 @@ class AnimeSchedule {
                     this.findNewDelayedEpisodes()
                 }
                 const updateFeeds = feedTypes.filter(feed => manifest.force || manifest.previousManifest?.[feed.key]?.episodes !== manifest.currentManifest?.[feed.key]?.episodes).map(feed => feed.title)
-                if (updateFeeds.length) WPC.send('feedChanged', { updateFeeds, manifest })
+                if (updateFeeds.length) updateSections(updateFeeds, manifest)
             } catch (error) {
                 debug(`Failed to check update manifest for changes, will try again later...`, error)
             } finally {
@@ -440,13 +439,7 @@ class AnimeSchedule {
                 debug(`Warn: failed fetching episode metadata for ${res.media.title?.userPreferred} episode ${res.episode}: ${error.stack} on feed (${type})`, error)
             }
             res.onclick = () => {
-                window.dispatchEvent(new CustomEvent('play-anime', {
-                    detail: {
-                        id: res.media?.id,
-                        episode: res.episode,
-                        torrentOnly: true
-                    }
-                }))
+                handlePlay(res.media?.id, res.episode, true)
                 return true
             }
             if (res.media?.format === 'MOVIE' && (res.media?.episodes ?? 0) <= 1) delete res.episode

@@ -1,16 +1,13 @@
 <script context='module'>
-  import { writable } from 'simple-store-svelte'
   import { click } from '@/modules/lib/click.js'
-  import WPC from '@/modules/wpc.js'
   import { matchPhrase } from '@/modules/util.js'
   import { settings } from '@/modules/settings.js'
   import { status } from '@/modules/networking.js'
-  import { loadedTorrent, completedTorrents, seedingTorrents, stagingTorrents } from '@/modules/torrent.js'
+  import { TORRENT } from '@/modules/bridge.js'
+  import { loadingSession, loadedTorrent, completedTorrents, seedingTorrents, stagingTorrents } from '@/modules/torrent.js'
   import ErrorCard from '@/components/cards/ErrorCard.svelte'
   import TorrentCard from '@/routes/torrentManager/components/TorrentCard.svelte'
   import { Search, RefreshCw, TriangleAlert, Package, Percent, Activity, Scale, Gauge, CloudDownload, CloudUpload, Sprout, Magnet, Timer } from 'lucide-svelte'
-  const rescanning = writable(true)
-  WPC.listen('rescan_done', () => rescanning.value = false)
 </script>
 <script>
   let searchText = ''
@@ -18,6 +15,11 @@
     const dedupe = results.filter((torrent, index, arr) => arr.findIndex(_torrent => _torrent.infoHash === torrent.infoHash) === index)
     if (!searchText?.length) return dedupe
     return dedupe.filter(({ name }) => matchPhrase(searchText, name, 0.4, false, true)) || []
+  }
+  function rescan() {
+    if (disableRescan) return
+    $loadingSession = true
+    TORRENT.rescan().then(() => $loadingSession = false)
   }
   $: disableRescan = ($seedingTorrents?.length + $stagingTorrents?.length + 1) >= settings.value.seedingLimit && !settings.value.torrentPersist
   $: filteredLoaded = matchPhrase(searchText, $loadedTorrent?.name, 0.4, false, true)
@@ -39,9 +41,9 @@
           autocomplete='off'
           spellcheck='false'
           data-option='search'
-          placeholder='Filter torrents by text, or manually specify one by pasting a magnet link or torrent file' disabled={$rescanning} bind:value={searchText} />
+          placeholder='Filter torrents by text, or manually specify one by pasting a magnet link or torrent file' disabled={$loadingSession} bind:value={searchText} />
       </div>
-      <button type='button' use:click={() => { if (!disableRescan) { $rescanning = true; window.dispatchEvent(new Event('rescan')) } }} disabled={disableRescan || $rescanning} title={disableRescan ? 'Enable Persist Files or Increase Seeding Limit' : $rescanning ? 'Rescanning Cache...' : 'Rescan Cache'} class='btn btn-primary d-flex align-items-center justify-content-center ml-20 mr-20 font-scale-16 h-full' class:cursor-wait={$rescanning}><RefreshCw class='mr-10' size='1.8rem' strokeWidth='2.5'/><span>Rescan</span></button>
+      <button type='button' use:click={rescan} disabled={disableRescan || $loadingSession} title={disableRescan ? 'Enable Persist Files or Increase Seeding Limit' : $loadingSession ? 'Rescanning Cache...' : 'Rescan Cache'} class='btn btn-primary d-flex align-items-center justify-content-center ml-20 mr-20 font-scale-16 h-full' class:cursor-wait={$loadingSession}><RefreshCw class='mr-10' size='1.8rem' strokeWidth='2.5'/><span>Rescan</span></button>
     </div>
   </div>
   <div class='d-none' class:d-inline-block={disableRescan}>

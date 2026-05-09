@@ -1,19 +1,9 @@
 <script context='module'>
-  import { COMMON, ELECTRON } from '@/modules/bridge.js'
+  import { COMMON } from '@/modules/bridge.js'
   import { writable } from 'simple-store-svelte'
-  import { cache } from '@/modules/cache.js'
   import { page, modal, destroyHistory, enableHistory } from '@/modules/navigation.js'
 
   export const statusTransition = writable(false)
-
-  export async function handleAnime (detail) {
-    const foundMedia = await cache.requestMedia(detail.id, detail.isMal)
-    if (foundMedia) {
-      ELECTRON.showAndFocus()
-      modal.open(modal.ANIME_DETAILS, foundMedia)
-    }
-  }
-  window.addEventListener('open-anime', (event) => handleAnime(event.detail))
 </script>
 
 <script>

@@ -1,5 +1,4 @@
 import { settings } from '@/modules/settings.js'
-import WPC from '@/modules/wpc.js'
 import { sleep, isValidNumber } from '@/modules/util.js'
 import { anilistClient } from '@/modules/providers/anilist/anilist.js'
 import { anitomyscript, getAniMappings, getMediaMaxEp } from '@/modules/anime/anime.js'
@@ -7,6 +6,7 @@ import { checkForZero } from '@/components/MediaHandler.svelte'
 import { status } from '@/modules/networking.js'
 import { extensionManager } from '@/modules/extensions/manager.js'
 import { SUPPORTS } from '@/modules/support.js'
+import { TORRENT } from '@/modules/bridge.js'
 import AnimeResolver from '@/modules/anime/animeresolver.js'
 import Debug from 'debug'
 const debug = Debug('ui:extensions')
@@ -168,18 +168,12 @@ export async function updatePeerCounts(entries, cacheOnly = false) {
   debug(`Updating peer counts for ${toScrape.length} entries (${entries.length - toScrape.length} served from cache)`)
 
   const updated = await Promise.race([
-    new Promise(resolve => {
-      function check(detail) {
-        if (detail.id !== id) return
-        debug('Got scrape response')
-        WPC.clear('scrape_done', check)
-        resolve(detail.result)
-      }
-      WPC.listen('scrape_done', check)
-      WPC.send('scrape', { id, infoHashes: toScrape.map(({ hash }) => hash) })
-    }),
-    sleep(15_000)
-  ])
+    TORRENT.scrape(id, entries.map(entry => entry.hash)),
+    sleep(15_000).then(() => { throw new Error('Scrape timed out') })
+  ]).catch(error => {
+    debug('Scrape failed:', error.message)
+    return null
+  })
   debug('Scrape complete')
 
   const scrapedHashes = new Set((updated || []).map(entry => entry.hash))

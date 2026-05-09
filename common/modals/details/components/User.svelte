@@ -1,56 +1,46 @@
+<script context='module'>
+  import { writable } from 'simple-store-svelte'
+  const activePopover = writable(null)
+</script>
 <script>
   import SmartImage from '@/components/visual/SmartImage.svelte'
   import Helper from '@/modules/providers/helper.js'
-  import { onMount, onDestroy } from 'svelte'
-  import { writable } from 'simple-store-svelte'
+  import { onDestroy } from 'svelte'
   import { since, capitalize, fadeIn, fadeOut } from '@/modules/util.js'
   import { click, hover, focus } from '@/modules/lib/click.js'
   import { copyToClipboard } from '@/modules/lib/clipboard.js'
   import { COMMON } from '@/modules/bridge.js'
-  import WPC from '@/modules/wpc.js'
 
   export let user = {}
   export let style = ''
-  const showUser = writable(false)
+
   const avatar = user.avatar?.large || user.avatar?.medium
+  let hideTimeout
 
   function initials(name) {
     const parts = name.split(/\s+/).filter(Boolean)
     return ((parts[0] ? parts[0][0] : '') + (parts[1] ? parts[1][0] : '')).toUpperCase()
   }
 
-  let hideTimeout
   function handleHover(state) {
     if (state) {
       if (hideTimeout) {
         clearTimeout(hideTimeout)
         hideTimeout = null
       }
-      showUser.set(true)
-      WPC.send('user-popover', user.id)
+      activePopover.set(user.id)
     } else {
       hideTimeout = setTimeout(() => {
-        showUser.set(false)
+        if ($activePopover === user.id) activePopover.set(null)
         hideTimeout = null
       }, 100)
       hideTimeout.unref?.()
     }
   }
 
-  function clearHover(userId) {
-    if (userId !== user.id && $showUser) {
-      showUser.set(false)
-      clearTimeout(hideTimeout)
-    }
-  }
-
-  onMount(() => WPC.listen('user-popover', clearHover))
-  onDestroy(() => {
-    clearTimeout(hideTimeout)
-    WPC.clear('user-popover', clearHover)
-  })
+  onDestroy(() => clearTimeout(hideTimeout))
 </script>
-<div class='popover h-50 w-50 d-inline-block not-reactive rounded-circle {$$restProps.class}' style={style} use:hover={handleHover} use:focus={(state) => showUser.set(state)}>
+<div class='popover h-50 w-50 d-inline-block not-reactive rounded-circle {$$restProps.class}' style={style} use:hover={handleHover} use:focus={(state) => activePopover.set(state ? user.id : null)}>
   <button class='avatar h-50 w-50 align-items-center justify-content-center p-0 rounded-circle bg-dark-light overflow-hidden pointer not-reactive flex-shrink-0' tabindex='-1' style='border: .3rem solid hsla(var(--dark-color-hsl), 0.9);'>
     {#if avatar}
       <SmartImage class='w-full h-full cover-img' images={[avatar, './404_square.png']}/>
@@ -61,7 +51,7 @@
       <div class='position-absolute text-white font-size-8 font-weight-bold blocked-banner' style='top: 40%; left: -34%;'>BLOCKED</div>
     {/if}
   </button>
-  {#if $showUser}
+  {#if $activePopover === user.id}
     <div class='popover-container position-absolute top-100 left-0 mw-0 z-5 border rounded-10 overflow-hidden test-remove-later fade-change' style:--theme-base-color={user.options?.profileColor ?? `var(--dark-color)`} in:fadeIn={{ duration: 180 }} out:fadeOut={{ duration: 120 }}>
       <div class='popover-card'>
         <div class='position-relative h-140 p-5 d-flex align-items-end'>

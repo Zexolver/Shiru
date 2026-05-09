@@ -44,12 +44,106 @@ ForegroundService.createNotificationChannel({
   importance: Importance.Min
 })
 
+const listeners = {}
+let _port = null
+let _resolvePort = null
+let _portReady = new Promise(resolve => { _resolvePort = resolve })
+
+function addListener(type, callback) {
+  if (!listeners[type]) listeners[type] = []
+  listeners[type].push(callback)
+}
+
+function send(type, data, transfer) {
+  _portReady.then(() => _port.postMessage({ type, data }, transfer))
+}
+
+function once(type, callback) {
+  const wrapper = (data) => {
+    callback(data)
+    listeners[type] = listeners[type].filter(fn => fn !== wrapper)
+  }
+  if (!listeners[type]) listeners[type] = []
+  listeners[type].push(wrapper)
+}
+
 window.torrent = {
   reload: () => ipcWire.send('torrent:reload'),
   onCrash: (callback) => {}, // Currently not used for Capacitor...
   onRequest: (callback) => ipcWire.on('torrent:onRequest', (event, opts) => callback(opts)),
-  portRequest: (settings) => ipcWire.invoke('torrent:portRequest', settings)
+  debug: (debug) => send('debug', debug),
+  rescan: () => new Promise(resolve => {
+    once('rescan_done', resolve)
+    send('rescan')
+  }),
+  scrape: (id, infoHashes) => new Promise(resolve => {
+    function check(detail) {
+      if (detail.id !== id) return
+      resolve(detail.result)
+      listeners['scrape_done'] = listeners['scrape_done'].filter(fn => fn !== check)
+    }
+    if (!listeners['scrape_done']) listeners['scrape_done'] = []
+    listeners['scrape_done'].push(check)
+    send('scrape', { id, infoHashes })
+  }),
+  stream: (id, hash, magnet, base64) => send('torrent', { id, hash, magnet, base64 }),
+  stage: (id, hash) => send('stage', { id, hash }),
+  complete: (hash) => send('complete', hash),
+  unload: (data) => send('unload', data),
+  untrack: (hash) => send('untrack', hash),
+  reannounce: (hash) => send('reannounce', hash),
+  onStats: (callback) => addListener('activity', callback),
+  onFiles: (callback) => addListener('files', callback),
+  onMagnet: (callback) => addListener('magnet', callback),
+  onTracks: (callback) => addListener('tracks', callback),
+  offTracks: () => { listeners['tracks'] = [] },
+  onSubtitles: (cbSubtitle, cbFont, cbFiles) => {
+    addListener('subtitle', cbSubtitle)
+    addListener('file', cbFont)
+    addListener('subtitleFile', cbFiles)
+  },
+  offSubtitles: () => {
+    listeners['subtitle'] = []
+    listeners['file'] = []
+    listeners['subtitleFile'] = []
+  },
+  onChapters: (callback) => addListener('chapters', callback),
+  onProgress: (callback) => addListener('progress', callback),
+  onCurrentStats: (callback) => addListener('stats', callback),
+  onExternalReady: (callback) => { listeners['externalReady'] = [callback] },
+  onExternalWatched: (callback) => { listeners['externalWatched'] = [callback] },
+  onAndroidExternal: (callback) => { listeners['androidExternal'] = [callback] },
+  onLoaded: (callback) => addListener('loaded', callback),
+  onUntrack: (callback) => addListener('untrack', callback),
+  onStage: (callback) => addListener('staging', callback),
+  onSeed: (callback) => addListener('seeding', callback),
+  onComplete: (callback) => addListener('completed', callback),
+  onCompletedStats: (callback) => addListener('completedStats', callback),
+  setPlayback: (current, external) => send('current', { current, external }),
+  restoreSession: (staging, seeding, completed, current) => {
+    if (staging) send('stage_all', staging)
+    if (seeding) send('seed_all', seeding)
+    if (completed) send('complete_all', completed)
+    if (current) send('load', current)
+  },
+  launchExternal: (current) => send('externalPlay', { current }),
+  updateNetwork: (status) => send('networking', status),
+  updateSettings: (settings) => send('updateSettings', settings),
+  onNotify: (callback) => {
+    addListener('info', (detail) => callback('info', detail))
+    addListener('warn', (detail) => callback('warn', detail))
+    addListener('error', (detail) => callback('error', detail))
+  },
+  portRequest: async (settings) => {
+    _port = await ipcWire.invoke('torrent:portRequest', settings)
+    _port.onmessage(({ data }) => {
+      const cbs = listeners[data.type]
+      if (cbs) cbs.forEach(callback => callback(data.data))
+    })
+    _resolvePort()
+  }
 }
+
 window.common = {
   getAppVersion: async () => (await Capacitor.getInfo())?.version,
   getPlatformInfo: () => ({
@@ -83,6 +177,7 @@ window.common = {
   onProviderToken: (callback) => ipcWire.on('common:onProviderToken', (event, provider, opts) => callback(provider, opts)),
   onRequestPlay: (callback) => ipcWire.on('common:onRequestPlay', (event, opts) => callback(opts))
 }
+
 window.android = {
   /**
    * Sends the app to the background.

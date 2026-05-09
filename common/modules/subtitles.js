@@ -2,9 +2,9 @@ import JASSUB from 'jassub'
 import { hex2arr, bin2hex } from 'uint8-util'
 import { toTS, subRx, videoRx } from '@/modules/util.js'
 import { settings } from '@/modules/settings.js'
-import { client } from '@/modules/torrent.js'
 import clipboard from '@/modules/lib/clipboard.js'
 import { SUPPORTS } from '@/modules/support.js'
+import { TORRENT } from '@/modules/bridge.js'
 
 const defaultHeader = `[Script Info]
 Title: English (US)
@@ -40,15 +40,14 @@ export default class Subtitles {
     this.videoFiles = files.filter(file => videoRx.test(file.name))
     this.subtitleFiles = []
     this.timeout = null
-    this.handleFile = ({ detail }) => {
+    this.handleFile = (detail) => {
       if (this.selected) {
         const uint8 = hex2arr(bin2hex(detail))
         this.fonts.push(uint8)
         this.renderer?.addFont(uint8)
       }
     }
-    this.handleSubtitle = ({ detail }) => {
-      const { subtitle, trackNumber } = detail
+    this.handleSubtitle = ({ subtitle, trackNumber }) => {
       if (this.selected) {
         const string = JSON.stringify(subtitle)
         if (this._tracksString[trackNumber] && !this._tracksString[trackNumber].has(string)) {
@@ -60,7 +59,7 @@ export default class Subtitles {
       }
     }
 
-    this.handleTracks = ({ detail }) => {
+    this.handleTracks = (detail) => {
       if (this.selected) {
         for (const track of detail) {
           if (!this.tracks[track.number]) {
@@ -112,14 +111,12 @@ export default class Subtitles {
         if (subRx.test(file.name)) this.addSingleSubtitleFile(file)
       }
     }
-    this.handleSubtitleFile = ({ detail }) => {
+    this.handleSubtitleFile = (detail) => {
       this.addSingleSubtitleFile(new File([detail.data], detail.name))
     }
 
-    client.addEventListener('tracks', this.handleTracks)
-    client.addEventListener('subtitle', this.handleSubtitle)
-    client.addEventListener('file', this.handleFile)
-    client.addEventListener('subtitleFile', this.handleSubtitleFile)
+    TORRENT.onTracks(this.handleTracks)
+    TORRENT.onSubtitles(this.handleSubtitle, this.handleFile, this.handleSubtitleFile)
     clipboard.addEventListener('text', this.handleClipboardText)
     clipboard.addEventListener('files', this.handleClipboardFiles)
   }
@@ -297,12 +294,10 @@ export default class Subtitles {
   }
 
   destroy () {
-    client.removeEventListener('tracks', this.handleTracks)
-    client.removeEventListener('subtitle', this.handleSubtitle)
-    client.removeEventListener('file', this.handleFile)
-    client.removeEventListener('files', this.handleClipboardFiles)
-    client.removeEventListener('text', this.handleClipboardText)
-    client.removeEventListener('subtitleFile', this.handleSubtitleFile)
+    TORRENT.offTracks()
+    TORRENT.offSubtitles()
+    clipboard.removeEventListener('text', this.handleClipboardText)
+    clipboard.removeEventListener('files', this.handleClipboardFiles)
     this.stream?.destroy()
     this.parser?.destroy()
     this.renderer?.destroy()

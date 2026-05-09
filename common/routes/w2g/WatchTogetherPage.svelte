@@ -4,11 +4,10 @@
   import { status } from '@/modules/networking.js'
   import { SUPPORTS } from '@/modules/support.js'
   import { page } from '@/modules/navigation.js'
-  import { COMMON } from '@/modules/bridge.js'
+  import { COMMON, TORRENT } from '@/modules/bridge.js'
   import { loadedTorrent } from '@/modules/torrent.js'
   import { settings } from '@/modules/settings.js'
   import { toast } from 'svelte-sonner'
-  import WPC from '@/modules/wpc.js'
   import Debug from 'debug'
   const debug = Debug('ui:w2g')
 
@@ -48,8 +47,8 @@
 
   // Only allow host to change magnet.
   // TODO: Make this an optional setting.
-  WPC.listen('magnet', (detail) => {
-    if (state.value?.isHost) state.value.magnetLink(detail)
+  TORRENT.onMagnet(magnet => {
+    if (state.value?.isHost) state.value.magnetLink(magnet)
   })
 
   w2gEmitter.addEventListener('player', ({ detail }) => state.value?.playerStateChanged(detail))

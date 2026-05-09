@@ -1,8 +1,9 @@
 <script context='module'>
     import { Download, CloudUpload, CloudDownload, FolderX, FolderCheck, TvMinimalPlay } from 'lucide-svelte'
     import { settings } from '@/modules/settings.js'
-    import { stage, loadedTorrent, stagingTorrents, seedingTorrents, completedTorrents } from '@/modules/torrent.js'
+    import { add, stage, loadedTorrent, stagingTorrents, seedingTorrents, completedTorrents } from '@/modules/torrent.js'
     import { getHash } from '@/modules/anime/animehash.js'
+    import { handlePlay, handleAnime } from '@/modules/anime/anime.js'
     import { click } from '@/modules/lib/click.js'
 
     export function playActive(hash, search, magnet, prompt = true) {
@@ -10,19 +11,13 @@
         const resolvedHash = getHash(search?.media?.id, { episode: search?.episode, client: true, batchGuess: true }, false, true)
         const activeHash = autoFile && getActiveHash([...(hash && hash !== resolvedHash ? [hash] : []), ...(resolvedHash ? [resolvedHash] : [])], false)
         if (activeHash && loadedTorrent.value?.infoHash !== activeHash && loadedTorrent.value?.fileHash !== activeHash) { // We have a cached and active hash with the requested media and episode, its predicted we should use this.
-            window.dispatchEvent(new CustomEvent('add', { detail: { resolvedHash: activeHash, search } }))
+            add(activeHash, search, activeHash)
         } else if ((autoFile || !prompt) && magnet && (!hash || (hash !== loadedTorrent.value?.infoHash && hash !== loadedTorrent.value?.fileHash))) { // Nothing found, request download from magnet.
-            window.dispatchEvent(new CustomEvent('play-torrent', { detail: { magnet } }))
+            add(magnet, null, null, null)
         } else if (prompt) { // Nothing found and no magnet, prompt user to locate torrent.
-            window.dispatchEvent(new CustomEvent('play-anime', {
-                detail: {
-                    id: search?.media?.id,
-                    episode: search?.episode,
-                    torrentOnly: true
-                }
-            }))
+            handlePlay(search?.media?.id, search?.episode, true)
         } else { // Nothing found, no magnet, and cannot prompt, show the anime details.
-            window.dispatchEvent(new CustomEvent('open-anime', { detail: { id: search?.media?.id } }))
+            handleAnime({ id: search?.media?.id })
         }
     }
 

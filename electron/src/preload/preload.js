@@ -1,20 +1,110 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+const listeners = {}
+let _port = null
+let _resolvePort = null
+let _portReady = new Promise(resolve => { _resolvePort = resolve })
+
+function addListener(type, callback) {
+  if (!listeners[type]) listeners[type] = []
+  listeners[type].push(callback)
+}
+
+function send(type, data, transfer) {
+  _portReady.then(() => _port.postMessage({ type, data }, transfer))
+}
+
+function once(type, callback) {
+  const wrapper = (data) => {
+    callback(data)
+    listeners[type] = listeners[type].filter(fn => fn !== wrapper)
+  }
+  if (!listeners[type]) listeners[type] = []
+  listeners[type].push(wrapper)
+}
+
 contextBridge.exposeInMainWorld('torrent', {
   reload: () => ipcRenderer.send('torrent:reload'),
   onCrash: (callback) => ipcRenderer.on('torrent:onCrash', callback),
   onRequest: (callback) => ipcRenderer.on('torrent:onRequest', (event, updateVersion) => callback(updateVersion)),
-  portRequest: async (settings) => {
-    const port = new Promise(resolve => {
-      ipcRenderer.once('electron:torrentPort', ({ ports }) => resolve({
-        onmessage: cb => { ports[0].onmessage = ({ type, data }) => cb({ type, data }) },
-        postMessage: (a, b) => ports[0].postMessage(a, b)
-      }))
+  debug: (debug) => send('debug', debug),
+  rescan: () => new Promise(resolve => {
+    once('rescan_done', resolve)
+    send('rescan')
+  }),
+  scrape: (id, infoHashes) => new Promise(resolve => {
+    function check(detail) {
+      if (detail.id !== id) return
+      resolve(detail.result)
+      listeners['scrape_done'] = listeners['scrape_done'].filter(fn => fn !== check)
+    }
+    if (!listeners['scrape_done']) listeners['scrape_done'] = []
+    listeners['scrape_done'].push(check)
+    send('scrape', { id, infoHashes })
+  }),
+  stream: (id, hash, magnet, base64) => send('torrent', { id, hash, magnet, base64 }),
+  stage: (id, hash) => send('stage', { id, hash }),
+  complete: (hash) => send('complete', hash),
+  unload: (data) => send('unload', data),
+  untrack: (hash) => send('untrack', hash),
+  reannounce: (hash) => send('reannounce', hash),
+  onStats: (callback) => addListener('activity', callback),
+  onFiles: (callback) => addListener('files', callback),
+  onMagnet: (callback) => addListener('magnet', callback),
+  onTracks: (callback) => addListener('tracks', callback),
+  offTracks: () => listeners['tracks'] = [],
+  onSubtitles: (cbSubtitle, cbFont, cbFiles) => {
+    addListener('subtitle', cbSubtitle)
+    addListener('file', cbFont)
+    addListener('subtitleFile', cbFiles)
+  },
+  offSubtitles: () => {
+    listeners['subtitle'] = []
+    listeners['file'] = []
+    listeners['subtitleFile'] = []
+  },
+  onChapters: (callback) => addListener('chapters', callback),
+  onProgress: (callback) => addListener('progress', callback),
+  onCurrentStats: (callback) => addListener('stats', callback),
+  onExternalReady: (callback) => listeners['externalReady'] = [callback],
+  onExternalWatched: (callback) => listeners['externalWatched'] = [callback],
+  onAndroidExternal: (callback) => listeners['androidExternal'] = [callback],
+  onLoaded: (callback) => addListener('loaded', callback),
+  onUntrack: (callback) => addListener('untrack', callback),
+  onStage: (callback) => addListener('staging', callback),
+  onSeed: (callback) => addListener('seeding', callback),
+  onComplete: (callback) => addListener('completed', callback),
+  onCompletedStats: (callback) => addListener('completedStats', callback),
+  setPlayback: (current, external) => send('current', { current, external }),
+  restoreSession: (staging, seeding, completed, current) => {
+    if (staging) send('stage_all', staging)
+    if (seeding) send('seed_all', seeding)
+    if (completed) send('complete_all', completed)
+    if (current) send('load', current)
+  },
+  launchExternal: (current) => send('externalPlay', { current }),
+  updateNetwork: (status) => send('networking', status),
+  updateSettings: (settings) => send('updateSettings', settings),
+  onNotify: (callback) => {
+    addListener('info', (detail) => callback('info', detail))
+    addListener('warn', (detail) => callback('warn', detail))
+    addListener('error', (detail) => callback('error', detail))
+  },
+  portRequest: (settings) => new Promise(resolve => {
+    ipcRenderer.once('electron:torrentPort', ({ ports }) => {
+      _port = ports[0]
+      _port.addEventListener('message', ({ data }) => {
+        const cbs = listeners[data.type]
+        if (cbs) cbs.forEach(callback => callback(data.data))
+      })
+      _port.start()
+      resolve()
+      _resolvePort()
     })
-    await ipcRenderer.invoke('torrent:portRequest', settings)
-    return port
-  }
+    ipcRenderer.invoke('torrent:portRequest', settings)
+  })
 })
+
 contextBridge.exposeInMainWorld('common', {
   getAppVersion: () => ipcRenderer.invoke('common:getAppVersion'),
   getPlatformInfo: () => ({

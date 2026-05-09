@@ -5,10 +5,10 @@ import { malDubs } from '@/modules/anime/animedubs.js'
 import { writable } from 'simple-store-svelte'
 import { settings } from '@/modules/settings.js'
 import { RSSManager } from '@/modules/rss.js'
-import { debounce } from '@/modules/util.js'
+import { debounce, uniqueStore } from '@/modules/util.js'
+import equal from 'fast-deep-equal/es6'
 import Helper from '@/modules/providers/helper.js'
 import Debug from 'debug'
-import WPC from '@/modules/wpc.js'
 const debug = Debug('ui:sections')
 
 const lastSearched = cache.getEntry(caches.HISTORY, 'lastSearched')
@@ -94,20 +94,20 @@ export default class SectionsManager {
 // list of all possible home screen sections
 export const sections = writable(createSections() || [])
 const updateStores = [
-  { store: writable(structuredClone(settings.value.homeSections)), key: 'homeSections', wpc: true },
+  { store: writable(structuredClone(settings.value.homeSections)), key: 'homeSections', canRemap: true },
   { store: writable(structuredClone(settings.value.customSections)), key: 'customSections' },
   { store: writable(structuredClone(settings.value.rssFeedsNew)), key: 'rssFeedsNew' }
 ]
 const debounceUpdate = debounce((value) => {
   let updated = false
-  for (const { store, key, wpc } of updateStores) {
+  for (const { store, key, canRemap } of updateStores) {
     if (JSON.stringify(store.value) !== JSON.stringify(value[key])) {
       if (!updated) {
         for (const section of sections.value) clearInterval(section.interval)
         sections.value = createSections()
         updated = true
       }
-      if (wpc) WPC.send('remap-sections')
+      if (canRemap) remapSections()
       store.set(structuredClone(value[key]))
     }
   }
@@ -323,3 +323,75 @@ function createSections () {
     ...settings.value.customSections.map(([title, genres, tags, genre_not, tag_not]) => createSection({ title, sort: 'TRENDING_DESC', format }, { ...(genres?.length > 0 ? { genre: genres } : {}), ...(tags?.length > 0 ? { tag: tags } : {}), hideMyAnime: settings.value.hideMyAnime, hideStatus, status_not }))
   ]
 }
+
+let mappedSections = {}
+export const manager = new SectionsManager()
+mapSections()
+
+export function remapSections() {
+  manager.clear()
+  mappedSections = {}
+  mapSections()
+}
+
+function mapSections() {
+  for (const section of sections.value) mappedSections[section.title] = section
+  for (const sectionTitle of settings.value.homeSections) manager.add(mappedSections[sectionTitle[0]])
+}
+
+const continueWatching = 'Continue Watching'
+const resolveData = async (data) => Promise.all(
+  data.map(async item => {
+    const resolved = item.data && typeof item.data.then === 'function' ? await item.data : item.data
+    const media = resolved?.media || resolved
+    return { ...item, data: (media ? { id: media.id, idMal: media.idMal, title: media.title, bannerImage: media.bannerImage, isAdult: media.isAdult, duration: media.duration, episodes: media.episodes, format: media.format } : resolved) }
+  })
+)
+if (Helper.getUser()) {
+  refreshSections(Helper.getClient().userLists, ['Dubbed Releases', 'Subbed Releases', 'Hentai Releases'], true)
+  refreshSections(Helper.getClient().userLists, [continueWatching, 'Sequels You Missed', 'Stories You Missed', 'Planning List', 'Completed List', 'Paused List', 'Dropped List', 'Watching List', 'Rewatching List'])
+}
+if (Helper.isMalAuth()) refreshSections(animeSchedule.subAiredLists, continueWatching) // When authorized with Anilist, this is already automatically handled.
+refreshSections(animeSchedule.dubAiredLists, continueWatching)
+function refreshSections(list, sections, schedule = false) {
+  uniqueStore(list).subscribe(async (_value) => {
+    const value = await _value
+    if (!value) return
+    for (const section of manager.sections) {
+      // remove preview value, to force UI to re-request data, which updates it once in viewport
+      if (sections.includes(section.title) && !section.hide && (!schedule || section.isSchedule)) {
+        const loaded = section.load(1, 50, section.variables)
+        if (!section.preview.value || !equal(await resolveData(loaded), await resolveData(section.preview.value))) section.preview.value = loaded
+      }
+    }
+  })
+}
+
+// update AniSchedule 'Releases' feeds when a change is detected for the specified feed(s).
+export function updateSections(updateFeeds, manifest) {
+  for (const section of manager.sections) {
+    try {
+      if (section.isSchedule && updateFeeds.includes(section.title)) {
+        animeSchedule.feedChanged(section.title.includes('Subbed') ? 'Sub' : section.title.includes('Dubbed') ? 'Dub' : 'Hentai', false, true, manifest).then((changed) => {
+          if (changed) section.preview.value = section.load(1, 50, section.variables)
+        })
+      }
+    } catch (error) {
+      debug(`Failed to update ${section.title} feed, this is likely a temporary connection issue:`, error)
+    }
+  }
+}
+
+// force update RSS feed when the user adjusts a series in the FileManager.
+export async function updateRSS() {
+  for (const section of manager.sections) {
+    if (section.isRSS && !section.isSchedule) {
+      const url = settings.value.rssFeedsNew.find(([feedTitle]) => feedTitle === section.title)?.[1]
+      if (url) {
+        const loaded = RSSManager.getMediaForRSS(1, 12, url, false, true)
+        if (!section.preview.value || !equal(await resolveData(loaded), await resolveData(section.preview.value))) section.preview.value = loaded
+      }
+    }
+  }
+}
+window.addEventListener('fileEdit', async () => updateRSS)

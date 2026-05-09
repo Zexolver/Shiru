@@ -7,6 +7,7 @@
   import { playActive } from '@/components/TorrentButton.svelte'
   import SoftModal from '@/components/modals/SoftModal.svelte'
   import ErrorCard from '@/components/cards/ErrorCard.svelte'
+  import { handleAnime } from '@/modules/anime/anime.js'
   import { modal } from '@/modules/navigation.js'
   import { click } from '@/modules/lib/click.js'
   import { debounce } from '@/modules/util.js'
@@ -73,7 +74,7 @@
       return [...n]
     })
     close()
-    if (view) window.dispatchEvent(new CustomEvent('open-anime', { detail: { id: notification.id } }))
+    if (view) handleAnime({ id: notification.id })
     else playActive(notification.hash, { media: { id: notification.id }, episode: notification.episode }, notification.magnet, notification.click_action === 'PLAY')
   }
 

@@ -2,7 +2,7 @@
   import { click } from '@/modules/lib/click.js'
   import { cache, caches } from '@/modules/cache.js'
   import { SUPPORTS } from '@/modules/support.js'
-  import { COMMON, ELECTRON } from '@/modules/bridge.js'
+  import { COMMON, ELECTRON, TORRENT } from '@/modules/bridge.js'
   import { toast } from 'svelte-sonner'
 
   async function importSettings() {
@@ -65,7 +65,6 @@
   import ChangelogTab from '@/routes/settings/tabs/ChangelogTab.svelte'
   import ConfirmButton from '@/components/inputs/ConfirmButton.svelte'
   import { modal } from '@/modules/navigation.js'
-  import WPC from '@/modules/wpc.js'
   import { copyToClipboard } from '@/modules/lib/clipboard.js'
   import semver from 'semver'
   import Debug from 'debug'
@@ -84,7 +83,7 @@
   function updateDebug (debug) {
     Debug.disable()
     if (debug) Debug.enable(debug)
-    WPC.send('debug', debug)
+    TORRENT.debug(debug)
   }
 
   $: updateDebug($debugStore)

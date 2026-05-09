@@ -1,4 +1,4 @@
-import { codes, DOMPARSER, getRandomInt, countdown, sleep } from '@/modules/util.js'
+import { codes, DOMPARSER, getRandomInt, countdown, sleep, isValidNumber } from '@/modules/util.js'
 import { printError } from '@/modules/networking.js'
 import { anilistClient } from '@/modules/providers/anilist/anilist.js'
 import _anitomyscript from 'anitomyscript'
@@ -11,7 +11,8 @@ import { animeSchedule } from '@/modules/anime/animeschedule.js'
 import AnimeResolver from '@/modules/anime/animeresolver.js'
 import { episodesList } from '@/modules/episodes.js'
 import { settings } from '@/modules/settings.js'
-import { cache, caches } from '@/modules/cache.js'
+import { cache, caches, mediaCache } from '@/modules/cache.js'
+import { COMMON, ELECTRON } from '@/modules/bridge.js'
 import { status } from '@/modules/networking.js'
 import Helper from '@/modules/providers/helper.js'
 import Bottleneck from 'bottleneck'
@@ -20,6 +21,11 @@ import Debug from 'debug'
 const debug = Debug('ui:anime')
 
 const imageRx = /\.(jpeg|jpg|gif|png|webp)/i
+
+COMMON.onRequestPlay((opts) => {
+  ELECTRON.showAndFocus()
+  handlePlay(opts.id, opts.episode, opts.torrentOnly)
+})
 
 clipboard.addEventListener('files', ({ detail }) => {
   for (const file of detail) {
@@ -52,6 +58,33 @@ clipboard.addEventListener('text', ({ detail }) => {
     }
   }
 })
+
+export function play (media, episode, force = false) {
+  if (!media) return
+  if (isValidNumber(episode)) return playAnime(media, episode, force)
+  if (media.status === 'NOT_YET_RELEASED') return
+  playMedia(media)
+}
+
+export function handlePlay (id, episode, torrentOnly) {
+  const cachedMedia = mediaCache.value[id]
+  if (!cachedMedia) return
+  const cachedEpisode = isValidNumber(episode) ? episode : cachedMedia?.mediaListEntry?.progress
+  const desiredEpisode = (isValidNumber(episode) ? episode : cachedEpisode && cachedEpisode !== 0 ? cachedEpisode + 1 : cachedEpisode)
+  if (torrentOnly) {
+    if (desiredEpisode) return playAnime(cachedMedia, desiredEpisode)
+    if (cachedMedia?.status === 'NOT_YET_RELEASED') return
+    playMedia(cachedMedia)
+  } else play(cachedMedia, desiredEpisode)
+}
+
+export async function handleAnime (detail) {
+  const foundMedia = await cache.requestMedia(detail.id, detail.isMal)
+  if (foundMedia) {
+    ELECTRON.showAndFocus()
+    modal.open(modal.ANIME_DETAILS, foundMedia)
+  }
+}
 
 export async function traceAnime (image) { // WAIT lookup logic
   let options
@@ -150,7 +183,9 @@ function constructChapters (results, duration) {
 
 export async function getChaptersAniSkip (file, duration) {
   const resAccurate = await fetch(`https://api.aniskip.com/v2/skip-times/${file.media.media.idMal}/${file.media.episode}/?episodeLength=${duration}&types=op&types=ed&types=recap`)
+  if (!resAccurate?.ok) return []
   const jsonAccurate = await resAccurate.json()
+  if (!jsonAccurate?.ok) return []
 
   const resRough = await fetch(`https://api.aniskip.com/v2/skip-times/${file.media.media.idMal}/${file.media.episode}/?episodeLength=0&types=op&types=ed&types=recap`)
   const jsonRough = await resRough.json()

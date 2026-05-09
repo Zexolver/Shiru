@@ -25,8 +25,8 @@
   import Keybinds, { loadWithDefaults, condition } from 'svelte-keybinds'
   import { SUPPORTS } from '@/modules/support.js'
   import 'rvfc-polyfill'
-  import { ELECTRON, ANDROID } from '@/modules/bridge.js'
-  import WPC from '@/modules/wpc.js'
+  import { ELECTRON, ANDROID, TORRENT } from '@/modules/bridge.js'
+  import { unload } from '@/modules/torrent.js'
   import { X, Minus, ArrowDown, ArrowUp, Captions, CircleHelp, Contrast, FastForward, Keyboard, EllipsisVertical, SquareArrowOutUpRight, List, Eye, FilePlus2, ListMusic, ListVideo, Maximize, Minimize, Pause, PictureInPicture, PictureInPicture2, Play, Proportions, RefreshCcw, Rewind, RotateCcw, RotateCw, ScreenShare, SkipBack, SkipForward, Users, Volume1, Volume2, VolumeX, SlidersVertical, SquarePen, Milestone, ClockArrowDown, ClockArrowUp } from 'lucide-svelte'
   import Debug from 'debug'
   const debug = Debug('ui:player')
@@ -257,7 +257,6 @@
   }
   $: loadDeband($settings.playerDeband, video)
 
-  let externalReadyListener
   async function handleCurrent (file) {
     paused = true
     canPlay = false
@@ -297,21 +296,19 @@
     } else externalPlaying = false
     emit('current', current) // #handleCurrent in MediaHandler
     if (externalPlayback) {
-      WPC.clear('externalReady', externalReadyListener)
-      externalReadyListener = () => {
+      TORRENT.onExternalReady(() => {
         hideBuffering()
         externalPlayerReady = true
         setTimeout(() => {
           if (externalPlayerReady && !externalPlaying) autoPlay()
         }, 1_500)
-      }
-      WPC.listen('externalReady', externalReadyListener)
+      })
     }
     paused = true
     currentTime = 0
     targetTime = 0
     launchedExternal = launchExternal
-    WPC.send('current', { current: file, external: settings.value.enableExternal || launchExternal })
+    TORRENT.setPlayback(file, settings.value.enableExternal || launchExternal)
   }
 
   export let media
@@ -445,28 +442,23 @@
     } else if (!externalPlayback) video.pause()
   }
 
-  let watchedListener
-  let androidListener
   let externalPlaying = false
   function playPause () {
     if (hidden) return
     if (externalPlayback) {
       const duration = current.media?.media?.duration || durationMap[current.media?.media?.format]
       if (duration) {
-        WPC.clear('externalWatched', watchedListener)
-        watchedListener = (detail) => {
+        TORRENT.onExternalWatched(watchTime => {
           const watchDuration = duration * 60
-          checkCompletionByTime(detail, watchDuration)
-          currentTime = detail > watchDuration ? watchDuration : detail
-          targetTime = detail > watchDuration ? watchDuration : detail
+          checkCompletionByTime(watchTime, watchDuration)
+          currentTime = watchTime > watchDuration ? watchDuration : watchTime
+          targetTime = watchTime > watchDuration ? watchDuration : watchTime
           launchedExternal = false
-        }
-        WPC.listen('externalWatched', watchedListener)
+        })
       }
       externalPlaying = true
       if (SUPPORTS.isAndroid) {
-        WPC.clear('androidExternal', androidListener)
-        androidListener = (url) => {
+        TORRENT.onAndroidExternal(url => {
           const startTime = Date.now()
           const externalWatched = () => {
             const watchTime = (Date.now() - startTime) / 1_000
@@ -477,10 +469,9 @@
             launchedExternal = false
           }
           ANDROID.launchExternal?.(url)?.then?.(() => externalWatched())
-        }
-        WPC.listen('androidExternal', androidListener)
+        })
       }
-      WPC.send('externalPlay', { current })
+      TORRENT.launchExternal(current)
     } else paused = !paused
     resetImmerse()
     updateSubs()
@@ -1189,16 +1180,16 @@
     return 0
   }
   let buffer = 0
-  WPC.listen('progress', (detail) => {
-    buffer = detail * 100
+  TORRENT.onProgress(progress => {
+    buffer = progress * 100
   })
 
   let chapters = []
   let embeddedChapters = []
-  WPC.listen('chapters', (detail) => {
-    if (detail.length) {
-      chapters = detail
-      embeddedChapters = detail
+  TORRENT.onChapters(_chapters => {
+    if (_chapters.length) {
+      chapters = _chapters
+      embeddedChapters = _chapters
     }
   })
   async function findChapters () {
@@ -1470,7 +1461,7 @@
     }
   }
   const torrent = {}
-  WPC.listen('stats', updateStats)
+  TORRENT.onCurrentStats(updateStats)
   function updateStats (detail) {
     torrent.peers = detail.numPeers || 0
     torrent.up = detail.uploadSpeed || 0
@@ -1791,7 +1782,7 @@
       <span class='position-absolute rounded-10 top-0 right-0 m-10 btn-shadow button' class:ctrl={!SUPPORTS.isAndroid} class:mr-40={!SUPPORTS.isAndroid} class:mr-50={SUPPORTS.isAndroid} title='Minimize' data-name='playPause' use:click={() => (playPage.set(!playPage.value))}>
         <Minus size='1.9rem' strokeWidth='3'/>
       </span>
-      <span class='position-absolute rounded-10 top-0 right-0 m-10 btn-shadow button' class:ctrl={!SUPPORTS.isAndroid} title='Exit' data-name='playPause' use:click={() => { window.dispatchEvent(new CustomEvent('torrent-unload')); if ($page === page.PLAYER) page.navigateTo(page.HOME)}}>
+      <span class='position-absolute rounded-10 top-0 right-0 m-10 btn-shadow button' class:ctrl={!SUPPORTS.isAndroid} title='Exit' data-name='playPause' use:click={() => { unload(null, null, true); if ($page === page.PLAYER) page.navigateTo(page.HOME)}}>
         <X size='1.9rem' strokeWidth='3'/>
       </span>
     {/if}
