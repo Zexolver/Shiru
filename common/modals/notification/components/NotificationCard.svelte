@@ -1,6 +1,7 @@
 <script context='module'>
   import { since, isValidNumber, createListener } from '@/modules/util.js'
   import TorrentButton from '@/components/TorrentButton.svelte'
+  import SmartImage from '@/components/visual/SmartImage.svelte'
   import { Play, MailCheck, MailOpen } from 'lucide-svelte'
 
   const { reactive, init } = createListener(['torrent-button', 'read-button', 'continue-button', 'n-safe-area'])
@@ -88,12 +89,12 @@
     on:contextmenu|preventDefault={handleContextMenu}>
   {#if notification.heroImg}
     <div class='position-absolute top-0 left-0 w-full h-full'>
-      <img src={notification.heroImg} alt='bannerImage' class='hero-img img-cover w-full h-full' />
+      <SmartImage class={`img-cover w-full h-full`} images={[notification.heroImg, media?.bannerImage, (media?.trailer?.id && `https://i.ytimg.com/vi/${media?.trailer?.id}/hqdefault.jpg`)]} style='border-radius: .75rem;'/>
       <div class='position-absolute rounded-5 opacity-transition-hack' style='background: var(--notification-card-gradient)' />
     </div>
   {/if}
-  <div class='rounded-5 d-flex justify-content-center align-items-center overflow-hidden mr-10 z-10 notification-icon-container'>
-    <img src={notification.icon || './404_cover.png'} alt='icon' class='notification-icon rounded-5 w-auto' />
+  <div class='rounded-5 d-flex justify-content-center align-items-center overflow-hidden mr-10 z-10 icon-container'>
+    <SmartImage class={`rounded-5 w-auto`} images={[notification.iconXL, notification.icon, media?.coverImage?.extraLarge, media?.coverImage?.medium, './404_cover.png']} style='height: 100%; object-fit: cover; object-position: center;'/>
   </div>
   <div class='notification-content z-10 w-full'>
     <div class='d-flex'>
@@ -207,15 +208,7 @@
   .line-clamp-1 { line-height: 1.8; -webkit-line-clamp: 1; }
   .line-clamp-2 { line-height: 1.2; -webkit-line-clamp: 2; }
 
-  .hero-img {
-    border-radius: .75rem;
-  }
-  .notification-icon {
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-  }
-  .notification-icon-container {
+  .icon-container {
     width: 6rem;
     height: 8rem;
   }

@@ -1,6 +1,7 @@
 <script>
   export let images = []
   export let hidden = false
+  export let style = null
   export let color = null
   export let title = ''
 
@@ -31,4 +32,4 @@
     if (/ytimg\.com|youtube\.com|youtube-nocookie\.com|youtu\.be/i.test(image.currentSrc || image.src) && image.naturalWidth === 120 && image.naturalHeight === 90) handleError()
   }
 </script>
-<img class={$$restProps.class ? $$restProps.class.split(' ').filter(_class => (_class !== 'cover-rotated' && _class !== 'cr-380' && _class !== 'cr-400') || !resolvedImages[index]?.includes('404')).join(' ') : ''} style={(color ? `--color: ${color};` : '')} class:d-none={hidden || failed} src={!hidden && !failed ? (resolvedImages[index] || `${index}_404.jpg`) : `${index}_404.jpg`} alt='preview' title={title} draggable='false' loading='lazy' referrerpolicy='no-referrer' on:error={handleError} on:load={validate} />
+<img class={$$restProps.class ? $$restProps.class.split(' ').filter(_class => (_class !== 'cover-rotated' && _class !== 'cr-380' && _class !== 'cr-400') || !resolvedImages[index]?.includes('404')).join(' ') : ''} style={(color ? `--color: ${color};` : '') + (style ? `${style}` : '')} class:d-none={hidden || failed} src={!hidden && !failed ? (resolvedImages[index] || `${index}_404.jpg`) : `${index}_404.jpg`} alt='preview' title={title} draggable='false' loading='lazy' referrerpolicy='no-referrer' on:error={handleError} on:load={validate} />
