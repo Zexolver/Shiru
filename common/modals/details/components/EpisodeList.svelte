@@ -92,8 +92,13 @@
     }
   }
 
+  let requestId = 0
   async function load () {
+    const _requestId = ++requestId
+    const cancelled = () => _requestId !== requestId
+
     const mappings = await getAniMappings(id) || {}
+    if (cancelled()) return null
     const { episodes, specialCount, episodeCount: newEpisodeCount } = mappings
     const getEpisode = (episode) => {
       const keys = Object.keys(episodes || {})
@@ -106,10 +111,10 @@
     }
 
     /** @type {{ zeroEpisode: object; airingAt: number; episode: number; filler?: boolean; dubAiring?: object; }[]} */
-    episodeList = Array.from({ length: (newEpisodeCount > episodeCount ? newEpisodeCount : episodeCount) }, (_, i) => ({
+    let result = Array.from({ length: (newEpisodeCount > episodeCount ? newEpisodeCount : episodeCount) }, (_, i) => ({
       episode: i + 1, image: null, summary: null, rating: null, title: null, length: null, airdate: null, airingAt: null, filler: episodesList.getSingleEpisode(idMal, (i + 1)), dubAiring: dubbedEpisode(i, media)
     }))
-    let alEpisodes = episodeList
+    let alEpisodes = result
 
     // fallback: pull episodes from airing schedule if anime doesn't have expected episode count
     if (!(media.episodes && media.episodes === newEpisodeCount && media.status === 'FINISHED')) {
@@ -133,6 +138,7 @@
 
     if ((alEpisodes.length < episodeCount) || (!alEpisodes.length && !episodeCount)) {
       const eps = await episodesList.getEpisodeData(idMal)
+      if (cancelled()) return null
       if (eps?.length > 0) {
         const lastId = eps[eps.length - 1].episode_id
         alEpisodes = Array.from({ length: (lastId) }, (_, i) => ({
@@ -150,8 +156,10 @@
     let zeroAsFirstEpisode
     const zeroEpisode = await hasZeroEpisode(media, mappings)
     const kitsuMappings = await episodesList.getKitsuEpisodes(media.id)
+    if (cancelled()) return null
     if (zeroEpisode) alEpisodes.unshift({ episode: 0, title: zeroEpisode[0].title, airingAt: media.airingSchedule?.nodes?.find(node => node.episode === 1)?.airingAt || zeroEpisode[0].airingAt, filler: episodesList.getSingleEpisode(idMal, 0), dubAiring: dubbedEpisode(0, media)})
     for (const { episode, title: oldTitle, airingAt, filler, dubAiring } of alEpisodes?.length ? alEpisodes : [{ episode: 1, title: null, airingAt: null, filler: null, dubAiring: null }]) {
+      if (cancelled()) return null
       const airingPromise = await airingAt
       const alDate = airingPromise && new Date(typeof airingPromise === 'number' ? (airingPromise || 0) * 1000 : (airingPromise || 0))
 
@@ -202,13 +210,15 @@
 
       const episodeNumber = episode - (zeroAsFirstEpisode ? 1 : 0)
       const foundTitle = (media?.status === 'FINISHED' || (validatedAiringAt && new Date(validatedAiringAt).getTime() <= (Date.now() + 7 * 24 * 60 * 60 * 1000))) ? title || kitsuEpisode?.titles?.en_us || kitsuEpisode?.titles?.en_jp || newTitle?.jp || oldTitle?.jp : null
-      episodeList[episodeNumber - (!zeroEpisode ? 1 : 0)] = { zeroEpisode, episode: episodeNumber, image: (media?.status === 'FINISHED' || (validatedAiringAt && new Date(validatedAiringAt).getTime() <= (Date.now() + 7 * 24 * 60 * 60 * 1000))) ? episode === 0 ? zeroEpisode[0]?.thumbnail : episodeList.some((ep) => ep.image === (image || kitsuEpisode?.thumbnail?.original || streamingThumbnail) && ep.episode !== episodeNumber) ? null : (image || kitsuEpisode?.thumbnail?.original || streamingThumbnail) : null, summary: (media?.status === 'FINISHED' || (validatedAiringAt && new Date(validatedAiringAt).getTime() <= Date.now()) || ((episode === 0 || episode === 1) && !validatedAiringAt && media?.status === 'RELEASING')) ? episode === 0 ? (zeroSummary || summary || overview) : episodeList.some((ep) => ep.summary === (summary || overview || kitsuEpisode?.synopsis || kitsuEpisode?.description) && ep.episode !== episodeNumber) ? null : (summary || overview || kitsuEpisode?.synopsis || kitsuEpisode?.description) : `This episode ${validatedAiringAt || (media?.status === 'NOT_YET_RELEASED' && (media?.startDate?.month || media?.season || media?.seasonYear)) ? `will be released ${validatedAiringAt || media?.startDate?.month ? `${validatedAiringAt ? `on` : `in`} ${monthDay(validatedAiringAt || new Date(media.startDate.year, media.startDate.month, media.startDate.day), !validatedAiringAt)}` : `in ${media?.season ? capitalize(media?.season?.toLowerCase()) : ''} ${media?.seasonYear || ''}`}.` : ` is in production and does not have an estimated release date.`}`, rating, title: foundTitle && media?.episodes === 1 && (foundTitle.match(/ web|web |movie/i) || foundTitle.toLowerCase() === 'web') ? 'The Movie' : foundTitle, length: media?.status === 'FINISHED' || validatedAiringAt ? lastDuration : null, airdate: validatedAiringAt, airingAt: validatedAiringAt, filler, dubAiring: !zeroEpisode ? _dubAiring : dubbedEpisode(episodeNumber - 1, media) }
+      result[episodeNumber - (!zeroEpisode ? 1 : 0)] = { zeroEpisode, episode: episodeNumber, image: (media?.status === 'FINISHED' || (validatedAiringAt && new Date(validatedAiringAt).getTime() <= (Date.now() + 7 * 24 * 60 * 60 * 1000))) ? episode === 0 ? zeroEpisode[0]?.thumbnail : result.some((ep) => ep.image === (image || kitsuEpisode?.thumbnail?.original || streamingThumbnail) && ep.episode !== episodeNumber) ? null : (image || kitsuEpisode?.thumbnail?.original || streamingThumbnail) : null, summary: (media?.status === 'FINISHED' || (validatedAiringAt && new Date(validatedAiringAt).getTime() <= Date.now()) || ((episode === 0 || episode === 1) && !validatedAiringAt && media?.status === 'RELEASING')) ? episode === 0 ? (zeroSummary || summary || overview) : result.some((ep) => ep.summary === (summary || overview || kitsuEpisode?.synopsis || kitsuEpisode?.description) && ep.episode !== episodeNumber) ? null : (summary || overview || kitsuEpisode?.synopsis || kitsuEpisode?.description) : `This episode ${validatedAiringAt || (media?.status === 'NOT_YET_RELEASED' && (media?.startDate?.month || media?.season || media?.seasonYear)) ? `will be released ${validatedAiringAt || media?.startDate?.month ? `${validatedAiringAt ? `on` : `in`} ${monthDay(validatedAiringAt || new Date(media.startDate.year, media.startDate.month, media.startDate.day), !validatedAiringAt)}` : `in ${media?.season ? capitalize(media?.season?.toLowerCase()) : ''} ${media?.seasonYear || ''}`}.` : ` is in production and does not have an estimated release date.`}`, rating, title: foundTitle && media?.episodes === 1 && (foundTitle.match(/ web|web |movie/i) || foundTitle.toLowerCase() === 'web') ? 'The Movie' : foundTitle, length: media?.status === 'FINISHED' || validatedAiringAt ? lastDuration : null, airdate: validatedAiringAt, airingAt: validatedAiringAt, filler, dubAiring: !zeroEpisode ? _dubAiring : dubbedEpisode(episodeNumber - 1, media) }
     }
 
-    if (zeroEpisode && episodeList.length === alEpisodes.length) episodeList = episodeList.slice(0, -1)
-    if (media?.bannerImage && episodeList?.some(episode => episode?.image)) episodeList = episodeList.map(episode => episode?.image ? episode : { ...episode, image: media?.bannerImage })
-    currentEpisodes = episodeList?.slice(0, maxEpisodes)
-    return episodeList && episodeList?.length > 0 ? episodeList : null
+    if (cancelled()) return null
+    if (zeroEpisode && result.length === alEpisodes.length) result = result.slice(0, -1)
+    if (media?.bannerImage && result?.some(episode => episode?.image)) result = result.map(episode => episode?.image ? episode : { ...episode, image: media?.bannerImage })
+    currentEpisodes = result?.slice(0, maxEpisodes)
+    episodeList = result
+    return result?.length > 0 ? result : null
   }
 
   $: if (media) {
@@ -221,8 +231,10 @@
   }
 
   $: {
-    if (episodeOrder) currentEpisodes = episodeList?.slice(0, maxEpisodes)
-    else currentEpisodes = [...episodeList]?.reverse()?.slice(0, maxEpisodes)
+    if (episodeList?.length) {
+      if (episodeOrder) currentEpisodes = episodeList.slice(0, maxEpisodes)
+      else currentEpisodes = [...episodeList].reverse().slice(0, maxEpisodes)
+    }
   }
 
   let container

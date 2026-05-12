@@ -651,7 +651,7 @@ class AnilistClient {
      * @returns {Promise<[string, import('./al.d.ts').Media][]>}
      * */
     const res = await this.alRequest(query, requestVariables)
-    if (!res?.data) return cache.cachedEntry(caches.COMPOUND, JSON.stringify(flattenedTitles), true) // if the query failed just return the potential cache... better to have something than nothing.
+    if (!res?.data || Object.values(res.data).every(({ media }) => !media.length)) return cache.cachedEntry(caches.COMPOUND, JSON.stringify(flattenedTitles), true) // if the query failed just return the potential cache... better to have something than nothing.
 
     /** @type {Record<string, number>} */
     const searchResults = {}

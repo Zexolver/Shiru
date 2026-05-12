@@ -66,12 +66,6 @@
   })()
   $: staticMedia && (_modal?.focus(), (container && container.scrollTo({top: 0, behavior: 'smooth'})))
   $: staticMedia && (modal.length === 1 && $modal[modal.ANIME_DETAILS] && _modal?.focus())
-  $: {
-    if (staticMedia) {
-      if (scrollTags) scrollTags.scrollLeft = 0
-      if (scrollGenres) scrollGenres.scrollLeft = 0
-    }
-  }
   function checkClose ({ keyCode }) {
     if (keyCode === 27) close()
   }
@@ -130,11 +124,22 @@
     })
   }
 
+  function resetScroll(node) {
+    node.scrollLeft = 0
+    return {
+      update() {
+        node.scrollLeft = 0
+      }
+    }
+  }
+
   let episodeList = []
   let episodeLoad
   $: if (episodeLoad) {
+    const thisLoad = episodeLoad
     episodeLoad.then(episodes => {
-      episodeList = episodes
+      if (thisLoad !== episodeLoad) return
+      episodeList = episodes ?? []
     })
   }
 
@@ -260,7 +265,7 @@
               </div>
             </div>
             <Details media={staticMedia} alt={recommendations} />
-            <div bind:this={scrollTags} class='m-0 px-20 pb-0 pt-10 d-flex flex-row text-nowrap overflow-x-scroll text-capitalize align-items-start'>
+            <div bind:this={scrollTags} use:resetScroll={staticMedia?.id} class='m-0 px-20 pb-0 pt-10 d-flex flex-row text-nowrap overflow-x-scroll text-capitalize align-items-start'>
               {#each staticMedia.tags as tag}
                 {#if !(hasSpoiler && ((tag.isGeneralSpoiler && ['strict', 'hermit'].includes($settings.spoilers)) || (tag.isMediaSpoiler && ['moderate', 'strict', 'hermit'].includes($settings.spoilers))))}
                   <div class='bg-dark-light px-20 py-10 mr-10 rounded text-nowrap d-flex align-items-center'>
@@ -269,7 +274,7 @@
                 {/if}
               {/each}
             </div>
-            <div bind:this={scrollGenres} class='m-0 px-20 pb-0 pt-10 d-flex flex-row text-nowrap overflow-x-scroll text-capitalize align-items-start'>
+            <div bind:this={scrollGenres} use:resetScroll={staticMedia?.id} class='m-0 px-20 pb-0 pt-10 d-flex flex-row text-nowrap overflow-x-scroll text-capitalize align-items-start'>
               {#each staticMedia.genres as genre}
                 <div class='bg-dark-light px-20 py-10 mr-10 rounded text-nowrap d-flex align-items-center select-all'><svelte:component this={genreIcons[genre]} class='mr-5' size='1.8rem' /> {genre}</div>
               {/each}
@@ -293,7 +298,7 @@
               </div>
             {/if}
             <div class='col-lg-5 col-12 d-lg-none flex-column mt-20'>
-              <EpisodeList bind:episodeList={episodeList} mobileList={true} media={staticMedia} {episodeOrder} bind:userProgress bind:watched bind:hasSpoiler episodeCount={getMediaMaxEp(media)} {play} class='h-600' />
+              <EpisodeList bind:episodeList={episodeList} mobileList={true} media={staticMedia} {episodeOrder} {userProgress} {watched} {hasSpoiler} episodeCount={getMediaMaxEp(media)} {play} class='h-600' />
             </div>
             <div class='d-lg-block'>
               <ToggleList list={ staticMedia.relations?.edges?.filter(({ node, relationType }) => relationType !== 'CHARACTER' && node.type === 'ANIME' && node.format !== 'MUSIC' && !(settings.value.adult === 'none' && node.isAdult) && !(settings.value.adult !== 'hentai' && node.genres?.includes('Hentai')) && !missingIds.includes(node.id)).sort((a, b) => (a.node.seasonYear || Infinity) - (b.node.seasonYear || Infinity)) } promise={searchIDS} let:item let:promise title='Relations'>
@@ -334,7 +339,7 @@
           <button class='close order pointer z-30 bg-dark-light position-absolute' class:d-none={!episodeList?.length} data-toggle='tooltip' data-placement='top' data-target-breakpoint='md' data-title='Reverse Episodes' use:click={()=> {episodeOrder = !episodeOrder}}>
             <svelte:component this={episodeOrder ? ArrowDown01 : ArrowUp10} size='2rem' />
           </button>
-          <EpisodeList bind:episodeLoad={episodeLoad} media={staticMedia} {episodeOrder} bind:userProgress bind:watched bind:hasSpoiler episodeCount={getMediaMaxEp(media)} {play} />
+          <EpisodeList bind:episodeLoad={episodeLoad} media={staticMedia} {episodeOrder} {userProgress} {watched} {hasSpoiler} episodeCount={getMediaMaxEp(media)} {play} />
         </div>
       </div>
     {/if}

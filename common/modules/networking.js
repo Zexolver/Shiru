@@ -10,7 +10,7 @@ const OFFLINE_ABORT_REASON = new DOMException('Failed to fetch: client is offlin
 
 export const status = writable(navigator.onLine ? 'online' : 'offline')
 export async function printError(title, description, error) {
-  if (await isOffline(error) || await isAnilistDown(error)) return
+  if (error.status !== 429 && (await isOffline(error) || await isAnilistDown(error))) return
   trace(`Error: ${error.status || 429} - ${error.message || codes[error.status || 429]}`)
   if (settings.value.toasts.includes('All') || settings.value.toasts.includes('Errors')) {
     toast.error(title, {
@@ -61,7 +61,7 @@ window.fetch = async (...args) => {
 
   try {
     const res = await fetch(url, { ...options, signal: offlineController.signal })
-    if (!res?.ok) fetchError({ response: res?.response, status: res?.status, message: res?.message })
+    if (!res?.ok && res?.status !== 429) fetchError({ response: res?.response, status: res?.status, message: res?.message })
     return res
   } catch (error) {
     if (error.name !== 'AbortedOffline') fetchError(error)
